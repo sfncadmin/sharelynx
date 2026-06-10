@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SFNC Share Links</title>
+  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+  <script src="../vendor/msal-browser.min.js"></script>
+  <script src="../config.js"></script>
+  <link rel="stylesheet" href="taskpane.css" />
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M10.6 13.4a4 4 0 0 0 5.66 0l3.54-3.54a4 4 0 0 0-5.66-5.66l-1.77 1.77" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        <path d="M13.4 10.6a4 4 0 0 0-5.66 0L4.2 14.14a4 4 0 1 0 5.66 5.66l1.77-1.77" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+      <span>Share Links</span>
+    </div>
+    <div class="account" id="account-chip" hidden>
+      <span id="account-name"></span>
+      <button class="link-btn" id="btn-signout" type="button">Sign out</button>
+    </div>
+  </header>
+
+  <!-- Sign-in / config-missing view -->
+  <section id="view-signin" class="signin" hidden>
+    <p id="signin-blurb">Sign in with your Microsoft 365 account to create OneDrive and SharePoint sharing links.</p>
+    <button class="btn primary" id="btn-signin" type="button">Sign in</button>
+    <p class="hint" id="signin-error" hidden></p>
+  </section>
+
+  <!-- Main app -->
+  <main id="app" hidden>
+    <nav class="tabs" role="tablist">
+      <button class="tab active" role="tab" data-tab="files" type="button">Files</button>
+      <button class="tab" role="tab" data-tab="attachments" id="tab-btn-attachments" type="button">Attachments</button>
+      <button class="tab" role="tab" data-tab="settings" type="button" title="Settings">&#9881;</button>
+    </nav>
+
+    <!-- FILES -->
+    <section id="tab-files" class="tab-panel">
+      <div id="files-browser">
+        <div class="segmented" id="source-picker">
+          <button class="seg active" data-source="recent" type="button">Recent</button>
+          <button class="seg" data-source="onedrive" type="button">OneDrive</button>
+          <button class="seg" data-source="sharepoint" type="button">SharePoint</button>
+        </div>
+        <div class="searchrow" id="search-row" hidden>
+          <input type="search" id="search-input" placeholder="Search OneDrive&hellip; (Enter)" />
+        </div>
+        <div class="breadcrumb" id="breadcrumb"></div>
+        <div class="list" id="file-list" aria-live="polite"></div>
+      </div>
+
+      <!-- File detail: create link + manage access -->
+      <div id="file-detail" hidden>
+        <button class="link-btn back" id="btn-back" type="button">&#8592; Back to files</button>
+        <div class="file-head">
+          <div class="file-name" id="detail-name"></div>
+          <div class="file-meta" id="detail-meta"></div>
+        </div>
+
+        <h3>Create link</h3>
+        <div class="form-grid">
+          <label for="opt-scope">Who can use it</label>
+          <select id="opt-scope">
+            <option value="organization">People in your organization</option>
+            <option value="users">Specific people</option>
+            <option value="anonymous">Anyone with the link</option>
+          </select>
+
+          <label for="opt-type">Permission</label>
+          <select id="opt-type">
+            <option value="view">Can view</option>
+            <option value="edit">Can edit</option>
+          </select>
+
+          <label for="opt-expiry">Expires</label>
+          <input type="date" id="opt-expiry" />
+
+          <label for="opt-password">Password</label>
+          <input type="text" id="opt-password" placeholder="Optional" autocomplete="off" />
+        </div>
+        <p class="hint">Expiration is typically only honored on "Anyone" links; passwords only on OneDrive Personal. Your tenant policy decides &mdash; errors will say so.</p>
+        <div id="recipients-row" hidden>
+          <label class="block-label" for="opt-recipients">Recipients (comma-separated)</label>
+          <input type="text" id="opt-recipients" placeholder="name@company.com, name2@company.com" />
+          <p class="hint">Prefilled from To/Cc when available.</p>
+        </div>
+        <div class="btnrow">
+          <button class="btn primary" id="btn-create-insert" type="button">Create &amp; insert</button>
+          <button class="btn" id="btn-create-copy" type="button">Create &amp; copy</button>
+        </div>
+
+        <h3>Existing access</h3>
+        <div class="list" id="perm-list"></div>
+      </div>
+    </section>
+
+    <!-- ATTACHMENTS -->
+    <section id="tab-attachments" class="tab-panel" hidden>
+      <p class="section-intro">Upload attachments on this draft to OneDrive and replace them with sharing links (created with your default link settings).</p>
+      <div class="list" id="attachment-list"></div>
+      <div class="btnrow">
+        <button class="btn primary" id="btn-convert" type="button" disabled>Convert selected to links</button>
+        <button class="link-btn" id="btn-refresh-attachments" type="button">Refresh</button>
+      </div>
+      <div id="convert-log" class="convert-log"></div>
+    </section>
+
+    <!-- SETTINGS -->
+    <section id="tab-settings" class="tab-panel" hidden>
+      <h3>Link defaults</h3>
+      <div class="form-grid">
+        <label for="set-scope">Default audience</label>
+        <select id="set-scope">
+          <option value="organization">People in your organization</option>
+          <option value="users">Specific people</option>
+          <option value="anonymous">Anyone with the link</option>
+        </select>
+
+        <label for="set-type">Default permission</label>
+        <select id="set-type">
+          <option value="view">Can view</option>
+          <option value="edit">Can edit</option>
+        </select>
+
+        <label for="set-expdays">Expire after (days)</label>
+        <input type="number" id="set-expdays" min="0" max="730" />
+      </div>
+      <p class="hint">0 days = no expiration.</p>
+
+      <h3>Attachment conversion</h3>
+      <div class="form-grid">
+        <label for="set-folder">Upload folder (OneDrive)</label>
+        <input type="text" id="set-folder" />
+
+        <label for="set-threshold">Warn on send when attachments exceed (MB)</label>
+        <input type="number" id="set-threshold" min="0" max="150" />
+      </div>
+      <p class="hint">0 MB = disable the on-send warning. Threshold changes apply after Outlook reloads the add-in.</p>
+
+      <div class="btnrow">
+        <button class="btn primary" id="btn-save-settings" type="button">Save settings</button>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" hidden></div>
+
+  <script type="module" src="taskpane.js"></script>
+</body>
+</html>
