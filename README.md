@@ -75,6 +75,34 @@ Open a draft → **Share Links** → **Sign in**. With NAA-capable hosts sign-in
 an MSAL popup appears. First sign-in asks for consent (or pre-consent for the tenant with the
 admin-consent URL the setup script prints).
 
+## Shipping a change (the iteration loop)
+
+There are two hosting layers, and only one of them is slow:
+
+| Layer | Hosts | Update speed |
+|-|-|-|
+| GitHub Pages | the code (`src/**`) | ~1-2 min after `git push`, automatic |
+| M365 Integrated Apps | the manifest (buttons, permissions, URLs) | up to ~24h, **only when the manifest changes** |
+
+So **code changes are fast** — Pages rebuilds on every push to `GitMain` on its own (no GitHub
+Action needed; there's no build step). The ~24h M365 propagation only recurs if you edit
+`manifest.xml` itself (new ribbon button, changed permissions, renamed, repointed URL) — rare.
+
+```powershell
+npm run deploy           # validates manifest.xml, then git add/commit/push -> Pages auto-rebuilds
+# ...wait ~1-2 min, then in Outlook close & reopen the task pane to pull new code
+```
+
+**Gotcha — stale pane after a push.** Outlook's embedded browser (WebView2) caches the old JS, so
+the pane can show old code even though Pages updated. Fixes, easiest first:
+
+1. Close and reopen the task pane.
+2. Restart Outlook.
+3. Clear the Office web-add-in cache: delete the contents of
+   `%LOCALAPPDATA%\Microsoft\Office\16.0\Wef\` while Outlook is closed.
+
+This is a local cache, not a deploy delay — seconds, not hours. Don't mistake one for the other.
+
 ## Known platform limits (tenant/Graph, not bugs)
 
 - **"Anyone" links** fail if anonymous sharing is disabled in the SharePoint admin center — Graph returns the policy error and the pane surfaces it.

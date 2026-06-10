@@ -6,7 +6,8 @@
   "scripts": {
     "certs": "office-addin-dev-certs install",
     "start": "node server.js",
-    "validate": "office-addin-manifest validate manifest.xml"
+    "validate": "office-addin-manifest validate manifest.xml",
+    "deploy": "office-addin-manifest validate manifest.xml && git add -A && git commit -m \"Update add-in\" && git push"
   },
   "dependencies": {
     "@azure/msal-browser": "^3.26.0"
