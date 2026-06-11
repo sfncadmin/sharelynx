@@ -226,3 +226,34 @@ h3 {
   z-index: 10;
 }
 #toast.error { background: var(--danger); }
+
+/* policy admin section */
+.badge {
+  display: inline-block;
+  background: var(--primary);
+  color: #fff;
+  border-radius: 3px;
+  padding: 0 5px;
+  font-size: 10px;
+  font-weight: 600;
+  vertical-align: middle;
+  margin-left: 5px;
+  letter-spacing: 0.2px;
+}
+.policy-summary {
+  background: var(--bg-2);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  margin-bottom: 8px;
+}
+.policy-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  gap: 8px;
+}
+.policy-row:last-child { border-bottom: none; }
+.policy-val { color: var(--primary); font-weight: 500; flex-shrink: 0; }

@@ -1,8 +1,14 @@
 // Shape of src/config.js, written by setup\2026_06.10_Setup_EntraApp_v1.0.ps1.
-// config.js IS committed (clientId/tenantId are not secrets for a public-client SPA);
-// run the setup script to generate it for a new tenant.
+// config.js IS committed (clientId is not a secret for a public-client SPA).
+// Run the setup script to generate it for a new tenant.
 window.SFNC_CONFIG = {
   clientId: "<entra-app-client-id>",
-  tenantId: "<entra-tenant-id>",
-  scopes: ["User.Read", "Files.ReadWrite.All", "Sites.Read.All"]
+  // tenantId is optional. Omit (or remove) to allow any Microsoft 365 tenant to sign in.
+  // Set it to restrict sign-in to your organization only.
+  // tenantId: "<entra-tenant-id>",
+  scopes: ["User.Read", "Files.ReadWrite.All", "Sites.Read.All", "GroupMember.Read.All"],
+  // Optional: SharePoint site ID containing the SFNC_ShareLinks_Policy list.
+  // Omit to use the root site. Admins: find a site's ID at
+  //   GET https://graph.microsoft.com/v1.0/sites/<hostname>:/<path>
+  // adminPolicySite: "contoso.sharepoint.com,abc123-...,abc456-..."
 };

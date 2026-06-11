@@ -56,7 +56,22 @@ const DEFAULT_SETTINGS = {
   thresholdMB: 5
 };
 
+const DEFAULT_POLICY = {
+  allowAnonymousLinks: true,
+  adminOnlyAnonymousLinks: false,
+  allowOrganizationLinks: true,
+  allowSpecificPeopleLinks: true,
+  defaultScope: null,
+  defaultType: null,
+  defaultExpDays: null,
+  adminGroupIds: [],
+  loaded: false,
+  _listUrl: null,
+};
+
 let settings = loadSettings();
+let policy = { ...DEFAULT_POLICY };
+let isAdmin = false;
 let inOutlook = false;
 let composeMode = false;
 const state = {
@@ -141,6 +156,7 @@ function showApp() {
   loadCurrent();
   if (composeMode) refreshAttachments();
   renderSettingsForm();
+  loadTenantPolicy();
 }
 
 // ---------- UI wiring ----------
@@ -219,6 +235,92 @@ function renderSettingsForm() {
   $("#set-expdays").value = settings.expDays;
   $("#set-folder").value = settings.folder;
   $("#set-threshold").value = settings.thresholdMB;
+}
+
+async function loadTenantPolicy() {
+  const rawPolicy = await graph.getSharePointPolicy();
+  policy = parsePolicy(rawPolicy);
+
+  if (!policy.loaded) {
+    const tenantDefaults = await graph.getTenantSharingDefaults();
+    if (tenantDefaults) {
+      if (tenantDefaults.defaultScope && !policy.defaultScope) policy.defaultScope = tenantDefaults.defaultScope;
+      if (tenantDefaults.defaultType && !policy.defaultType) policy.defaultType = tenantDefaults.defaultType;
+      if (tenantDefaults.allowAnonymousLinks === false) policy.allowAnonymousLinks = false;
+    }
+  }
+
+  if (policy.adminGroupIds.length > 0) {
+    const groups = await graph.getUserGroups();
+    const groupIds = new Set(groups.map((g) => g.id));
+    const groupNames = new Set(groups.map((g) => (g.displayName || "").toLowerCase()));
+    isAdmin = policy.adminGroupIds.some((id) => groupIds.has(id) || groupNames.has(id.toLowerCase()));
+  }
+
+  if (!localStorage.getItem("sfnc_settings")) {
+    if (policy.defaultScope) settings.scope = policy.defaultScope;
+    if (policy.defaultType) settings.type = policy.defaultType;
+    if (policy.defaultExpDays !== null) settings.expDays = policy.defaultExpDays;
+  }
+
+  applyPolicyToUI();
+  renderSettingsForm();
+}
+
+function parsePolicy(raw) {
+  if (!raw || !raw._raw) return { ...DEFAULT_POLICY };
+  const p = { ...DEFAULT_POLICY, loaded: true, _listUrl: raw._listUrl };
+  const r = raw._raw;
+  if ("allowAnonymousLinks" in r) p.allowAnonymousLinks = r.allowAnonymousLinks !== "false";
+  if ("adminOnlyAnonymousLinks" in r) p.adminOnlyAnonymousLinks = r.adminOnlyAnonymousLinks === "true";
+  if ("allowOrganizationLinks" in r) p.allowOrganizationLinks = r.allowOrganizationLinks !== "false";
+  if ("allowSpecificPeopleLinks" in r) p.allowSpecificPeopleLinks = r.allowSpecificPeopleLinks !== "false";
+  if (r.defaultScope) p.defaultScope = r.defaultScope;
+  if (r.defaultType) p.defaultType = r.defaultType;
+  if (r.defaultExpDays) p.defaultExpDays = parseInt(r.defaultExpDays, 10) || null;
+  if (r.adminGroupIds) p.adminGroupIds = r.adminGroupIds.split(",").map((s) => s.trim()).filter(Boolean);
+  return p;
+}
+
+function applyPolicyToUI() {
+  const allowAnon = policy.allowAnonymousLinks && (!policy.adminOnlyAnonymousLinks || isAdmin);
+  for (const selId of ["opt-scope", "set-scope"]) {
+    const sel = $("#" + selId);
+    if (!sel) continue;
+    const anonOpt = sel.querySelector('option[value="anonymous"]');
+    if (anonOpt) anonOpt.hidden = !allowAnon;
+    if (!allowAnon && sel.value === "anonymous") {
+      sel.value = "organization";
+      if (selId === "opt-scope") onScopeChange();
+    }
+  }
+  const adminSection = $("#policy-admin-section");
+  if (adminSection) {
+    adminSection.hidden = !(isAdmin && policy.loaded);
+    if (isAdmin && policy.loaded) renderPolicySection();
+  }
+}
+
+function renderPolicySection() {
+  const summary = $("#policy-summary");
+  if (!summary) return;
+  const rows = [
+    ["Anonymous links", policy.allowAnonymousLinks ? (policy.adminOnlyAnonymousLinks ? "Admins only" : "Allowed") : "Blocked"],
+    ["Org links", policy.allowOrganizationLinks ? "Allowed" : "Blocked"],
+    ["Specific people links", policy.allowSpecificPeopleLinks ? "Allowed" : "Blocked"],
+    ...(policy.defaultScope ? [["Default scope override", policy.defaultScope]] : []),
+    ...(policy.defaultType ? [["Default permission override", policy.defaultType]] : []),
+    ...(policy.defaultExpDays !== null ? [["Default expiry override (days)", String(policy.defaultExpDays)]] : []),
+    ["Admin groups", policy.adminGroupIds.length ? policy.adminGroupIds.join(", ") : "None configured"],
+  ];
+  summary.innerHTML = rows
+    .map(([label, value]) => `<div class="policy-row"><span>${esc(label)}</span><span class="policy-val">${esc(value)}</span></div>`)
+    .join("");
+  const link = $("#policy-list-link");
+  if (link && policy._listUrl) {
+    link.href = policy._listUrl;
+    link.hidden = false;
+  }
 }
 
 // ---------- file browser ----------
