@@ -17,6 +17,11 @@ Office.js web add-in. Works in classic Outlook for Windows (M365, WebView2), new
 - **Insert into the draft** or **copy to clipboard**; recipients prefilled from To/Cc for "specific people" links
 - **Existing access**: list current links and permissions on a file, copy or insert them, edit expiration, revoke
 
+### Shared-link review (Shared tab)
+- Lists everything the user has shared from their OneDrive (delta scan of the `shared` facet, cached for fast incremental refreshes) plus SharePoint items shared through the add-in
+- Every link shows audience, permission, and expiration, with a red **never expires** badge on links that have none, and a filter to show only never-expiring links
+- Prune in place: copy, edit/clear expiration, or revoke any link or direct grant without leaving the pane
+
 ### Attachments
 - **Convert attachments to links** (Attachments tab): uploads selected draft attachments to OneDrive, replaces them with sharing links created with the user's default link settings, and removes the attachments
 - **On-send Smart Alert** (OnMessageSend): warns when outgoing attachments exceed a configurable size threshold and offers the conversion instead
