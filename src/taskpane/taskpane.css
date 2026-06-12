@@ -249,31 +249,6 @@ h3 {
 .att-row .st.err { color: var(--danger); }
 .convert-log { color: var(--text-2); font-size: 12px; line-height: 1.5; }
 
-/* shared-by-me */
-.shared-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
-.chk { display: inline-flex; align-items: center; gap: 6px; color: var(--text-2); font-size: 12px; }
-.shared-item { border-bottom: 1px solid var(--border); padding: 5px 0 2px; }
-.shared-head { display: flex; align-items: center; gap: 6px; font-size: 12px; }
-.shared-head .ic { flex: 0 0 16px; display: inline-flex; align-items: center; justify-content: center; }
-.shared-head .nm {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  text-align: left;
-  background: none;
-  border: none;
-  padding: 3px 0;
-  color: var(--text);
-  font-weight: 600;
-}
-.shared-head .nm:hover { color: var(--primary); }
-.shared-head .dt { flex: 0 0 auto; color: var(--text-2); font-size: 11px; }
-.shared-item .perm { border-bottom: none; border-top: 1px solid #f1f1f1; margin-left: 22px; padding: 6px 0; }
-.shared-note { color: var(--text-2); font-size: 11px; padding: 6px 0; }
-.badge.warn { background: var(--danger); }
-
 /* toast */
 #toast {
   position: fixed;

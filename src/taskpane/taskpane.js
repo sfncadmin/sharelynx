@@ -193,13 +193,12 @@ function wireUi() {
 
   document.querySelectorAll(".tab").forEach((btn) => {
     btn.addEventListener("click", () => {
-      switchTab(btn.dataset.tab);
-      if (btn.dataset.tab === "shared") loadShared(false);
+      document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("active", b === btn));
+      ["files", "attachments", "settings"].forEach((t) => {
+        $("#tab-" + t).hidden = t !== btn.dataset.tab;
+      });
     });
   });
-
-  $("#btn-refresh-shared").addEventListener("click", () => loadShared(true));
-  $("#shared-filter-noexp").addEventListener("change", redrawShared);
 
   document.querySelectorAll(".seg").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -242,12 +241,6 @@ function wireUi() {
     saveSettings();
     toast("Settings saved.");
   });
-}
-
-const TABS = ["files", "attachments", "shared", "settings"];
-function switchTab(name) {
-  document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
-  TABS.forEach((t) => { $("#tab-" + t).hidden = t !== name; });
 }
 
 function renderSettingsForm() {
@@ -821,8 +814,6 @@ async function createLinkFlow(file, opts) {
     const updated = (res.value || []).find((p) => p.link && p.link.webUrl);
     if (updated) url = updated.link.webUrl;
   }
-  recordShared(file);
-  sharedLoaded = false; // Shared tab re-scans on next visit
   return { url, notes };
 }
 
@@ -887,99 +878,93 @@ async function loadPermissions() {
 }
 
 function renderPermissions(perms) {
+  const file = state.file;
   const list = $("#perm-list");
   list.innerHTML = "";
   if (!perms.length) {
     list.innerHTML = `<div class="empty">No sharing links or extra permissions on this file.</div>`;
     return;
   }
-  for (const p of perms) list.appendChild(permCard(state.file, p, loadPermissions));
-}
+  for (const p of perms) {
+    const card = document.createElement("div");
+    card.className = "perm";
+    const isOwner = (p.roles || []).includes("owner");
+    if (p.link) {
+      const bits = [];
+      bits.push((p.link.type === "edit" ? "can edit" : "can view"));
+      if (p.expirationDateTime) bits.push("expires " + fmtDate(p.expirationDateTime));
+      if (p.hasPassword) bits.push("password");
+      const people = (p.grantedToIdentitiesV2 || [])
+        .map((g) => g.user && (g.user.displayName || g.user.email))
+        .filter(Boolean);
+      card.innerHTML =
+        `<div class="who">🔗 ${esc(SCOPE_LABELS[p.link.scope] || p.link.scope)} · ${esc(bits.join(" · "))}</div>` +
+        (people.length ? `<div class="sub">${esc(people.join(", "))}</div>` : "") +
+        `<div class="sub">${esc(p.link.webUrl)}</div>` +
+        `<div class="actions"></div><div class="expiry-edit" hidden></div>`;
+      const actions = card.querySelector(".actions");
 
-// One permission/link card with copy/insert/expiration/remove actions.
-// Used by both the file detail view and the Shared tab; refresh is called
-// after any change (revoke, expiration update).
-function permCard(file, p, refresh) {
-  const card = document.createElement("div");
-  card.className = "perm";
-  const isOwner = (p.roles || []).includes("owner");
-  if (p.link) {
-    const bits = [];
-    bits.push((p.link.type === "edit" ? "can edit" : "can view"));
-    if (p.expirationDateTime) bits.push("expires " + fmtDate(p.expirationDateTime));
-    if (p.hasPassword) bits.push("password");
-    const people = (p.grantedToIdentitiesV2 || [])
-      .map((g) => g.user && (g.user.displayName || g.user.email))
-      .filter(Boolean);
-    card.innerHTML =
-      `<div class="who">🔗 ${esc(SCOPE_LABELS[p.link.scope] || p.link.scope)} · ${esc(bits.join(" · "))}` +
-      (p.expirationDateTime ? "" : '<span class="badge warn">never expires</span>') +
-      `</div>` +
-      (people.length ? `<div class="sub">${esc(people.join(", "))}</div>` : "") +
-      `<div class="sub">${esc(p.link.webUrl)}</div>` +
-      `<div class="actions"></div><div class="expiry-edit" hidden></div>`;
-    const actions = card.querySelector(".actions");
+      const copyBtn = document.createElement("button");
+      copyBtn.type = "button";
+      copyBtn.className = "link-btn";
+      copyBtn.textContent = "Copy";
+      copyBtn.addEventListener("click", async () => { await copyText(p.link.webUrl); toast("Link copied."); });
+      actions.appendChild(copyBtn);
 
-    const copyBtn = document.createElement("button");
-    copyBtn.type = "button";
-    copyBtn.className = "link-btn";
-    copyBtn.textContent = "Copy";
-    copyBtn.addEventListener("click", async () => { await copyText(p.link.webUrl); toast("Link copied."); });
-    actions.appendChild(copyBtn);
+      if (composeMode) {
+        const insBtn = document.createElement("button");
+        insBtn.type = "button";
+        insBtn.className = "link-btn";
+        insBtn.textContent = "Insert";
+        insBtn.addEventListener("click", async () => {
+          try {
+            await insertHtml(linkHtml(file.name, p.link.webUrl, p.expirationDateTime));
+            toast("Link inserted.");
+          } catch (e) { toast(e.message, true); }
+        });
+        actions.appendChild(insBtn);
+      }
 
-    if (composeMode) {
-      const insBtn = document.createElement("button");
-      insBtn.type = "button";
-      insBtn.className = "link-btn";
-      insBtn.textContent = "Insert";
-      insBtn.addEventListener("click", async () => {
-        try {
-          await insertHtml(linkHtml(file.name, p.link.webUrl, p.expirationDateTime));
-          toast("Link inserted.");
-        } catch (e) { toast(e.message, true); }
+      const expBtn = document.createElement("button");
+      expBtn.type = "button";
+      expBtn.className = "link-btn";
+      expBtn.textContent = "Expiration";
+      const editRow = card.querySelector(".expiry-edit");
+      expBtn.addEventListener("click", () => {
+        if (!editRow.hidden) { editRow.hidden = true; return; }
+        editRow.hidden = false;
+        editRow.innerHTML = "";
+        const input = document.createElement("input");
+        input.type = "date";
+        input.value = p.expirationDateTime ? p.expirationDateTime.slice(0, 10) : "";
+        const setBtn = document.createElement("button");
+        setBtn.type = "button";
+        setBtn.className = "btn";
+        setBtn.textContent = "Set";
+        setBtn.addEventListener("click", () => patchExpiry(p, input.value ? input.value + "T23:59:59Z" : null));
+        const clearBtn = document.createElement("button");
+        clearBtn.type = "button";
+        clearBtn.className = "link-btn";
+        clearBtn.textContent = "Clear";
+        clearBtn.addEventListener("click", () => patchExpiry(p, null));
+        editRow.append(input, setBtn, clearBtn);
       });
-      actions.appendChild(insBtn);
+      actions.appendChild(expBtn);
+
+      actions.appendChild(removeBtn(p));
+    } else {
+      const who =
+        (p.grantedToV2 && p.grantedToV2.user && (p.grantedToV2.user.displayName || p.grantedToV2.user.email)) ||
+        (p.grantedToIdentitiesV2 || []).map((g) => g.user && (g.user.displayName || g.user.email)).filter(Boolean).join(", ") ||
+        "Unknown";
+      card.innerHTML =
+        `<div class="who">👤 ${esc(who)}</div>` +
+        `<div class="sub">${esc((p.roles || []).join(", "))}${p.inheritedFrom ? " · inherited" : ""}</div>` +
+        `<div class="actions"></div>`;
+      if (!isOwner && !p.inheritedFrom) card.querySelector(".actions").appendChild(removeBtn(p));
     }
-
-    const expBtn = document.createElement("button");
-    expBtn.type = "button";
-    expBtn.className = "link-btn";
-    expBtn.textContent = "Expiration";
-    const editRow = card.querySelector(".expiry-edit");
-    expBtn.addEventListener("click", () => {
-      if (!editRow.hidden) { editRow.hidden = true; return; }
-      editRow.hidden = false;
-      editRow.innerHTML = "";
-      const input = document.createElement("input");
-      input.type = "date";
-      input.value = p.expirationDateTime ? p.expirationDateTime.slice(0, 10) : "";
-      const setBtn = document.createElement("button");
-      setBtn.type = "button";
-      setBtn.className = "btn";
-      setBtn.textContent = "Set";
-      setBtn.addEventListener("click", () => patchExpiry(p, input.value ? input.value + "T23:59:59Z" : null));
-      const clearBtn = document.createElement("button");
-      clearBtn.type = "button";
-      clearBtn.className = "link-btn";
-      clearBtn.textContent = "Clear";
-      clearBtn.addEventListener("click", () => patchExpiry(p, null));
-      editRow.append(input, setBtn, clearBtn);
-    });
-    actions.appendChild(expBtn);
-
-    actions.appendChild(removeBtn(p));
-  } else {
-    const who =
-      (p.grantedToV2 && p.grantedToV2.user && (p.grantedToV2.user.displayName || p.grantedToV2.user.email)) ||
-      (p.grantedToIdentitiesV2 || []).map((g) => g.user && (g.user.displayName || g.user.email)).filter(Boolean).join(", ") ||
-      "Unknown";
-    card.innerHTML =
-      `<div class="who">👤 ${esc(who)}</div>` +
-      `<div class="sub">${esc((p.roles || []).join(", "))}${p.inheritedFrom ? " · inherited" : ""}</div>` +
-      `<div class="actions"></div>`;
-    if (!isOwner && !p.inheritedFrom) card.querySelector(".actions").appendChild(removeBtn(p));
+    list.appendChild(card);
   }
-  return card;
 
   function removeBtn(p) {
     // window.confirm is unreliable inside Office webviews; use two-click confirm
@@ -998,7 +983,7 @@ function permCard(file, p, refresh) {
       try {
         await graph.deletePermission(file.driveId, file.itemId, p.id);
         toast("Access removed.");
-        refresh();
+        loadPermissions();
       } catch (e) {
         toast("Couldn't remove: " + e.message, true);
       }
@@ -1010,196 +995,11 @@ function permCard(file, p, refresh) {
     try {
       await graph.updatePermission(file.driveId, file.itemId, p.id, { expirationDateTime: iso });
       toast(iso ? "Expiration updated." : "Expiration cleared.");
-      refresh();
+      loadPermissions();
     } catch (e) {
       toast("Couldn't update expiration: " + e.message, true);
     }
   }
-}
-
-// ---------- shared-by-me (Shared tab) ----------
-
-let sharedLoaded = false;
-let sharedEntries = []; // scan + registry items, each with fetched .perms
-let sharedSkipped = 0;
-const SHARED_MAX = 100;
-const REG_MAX = 200;
-
-function loadSharedCache() {
-  try { return JSON.parse(localStorage.getItem("sfnc_shared_delta")) || null; } catch (e) { return null; }
-}
-
-function saveSharedCache(c) {
-  try { localStorage.setItem("sfnc_shared_delta", JSON.stringify(c)); } catch (e) { /* cache only */ }
-}
-
-// Registry of items shared through the add-in outside the user's own OneDrive
-// (e.g. SharePoint) — only OneDrive can be scanned for shares.
-function loadRegistry() {
-  try {
-    if (inOutlook && Office.context.roamingSettings) {
-      const v = Office.context.roamingSettings.get("sfnc_shared_reg");
-      if (v) return JSON.parse(v);
-    }
-  } catch (e) { /* fall back to local */ }
-  try { return JSON.parse(localStorage.getItem("sfnc_shared_reg")) || []; } catch (e) { return []; }
-}
-
-function saveRegistry(reg) {
-  localStorage.setItem("sfnc_shared_reg", JSON.stringify(reg));
-  if (inOutlook && Office.context.roamingSettings) {
-    try {
-      Office.context.roamingSettings.set("sfnc_shared_reg", JSON.stringify(reg));
-      Office.context.roamingSettings.saveAsync(() => {});
-    } catch (e) { /* non-fatal */ }
-  }
-}
-
-function recordShared(file) {
-  if (!file.driveId || !file.itemId) return;
-  const reg = loadRegistry();
-  const key = file.driveId + "|" + file.itemId;
-  if (reg.some((r) => r.driveId + "|" + r.itemId === key)) return;
-  reg.push({ kind: "file", name: file.name, driveId: file.driveId, itemId: file.itemId, webUrl: file.webUrl, modified: file.modified });
-  while (reg.length > REG_MAX) reg.shift();
-  saveRegistry(reg);
-}
-
-function dropFromRegistry(entry) {
-  const key = entry.driveId + "|" + entry.itemId;
-  saveRegistry(loadRegistry().filter((r) => r.driveId + "|" + r.itemId !== key));
-}
-
-async function mapLimit(items, limit, fn) {
-  let i = 0;
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
-    while (i < items.length) await fn(items[i++]);
-  }));
-}
-
-// Links + removable direct grants; owner and inherited permissions are noise here.
-function prunablePerms(perms) {
-  return perms.filter((p) => p.link || (!(p.roles || []).includes("owner") && !p.inheritedFrom));
-}
-
-async function loadShared(force) {
-  if (sharedLoaded && !force) return;
-  const list = $("#shared-list");
-  list.innerHTML = `<div class="loading">Scanning your OneDrive for shared items&hellip;</div>`;
-  let scan;
-  try {
-    scan = await graph.scanSharedItems(loadSharedCache(), (found) => {
-      const note = list.querySelector(".loading");
-      if (note) note.textContent = "Scanning your OneDrive… " + found + " shared item(s) found";
-    });
-  } catch (e) {
-    list.innerHTML = `<div class="empty">${esc(e.message)}</div>`;
-    return;
-  }
-  saveSharedCache(scan);
-
-  const entries = Object.values(scan.items);
-  const seen = new Set(entries.map((x) => x.driveId + "|" + x.itemId));
-  for (const r of loadRegistry()) {
-    if (!seen.has(r.driveId + "|" + r.itemId)) entries.push({ ...r, fromRegistry: true });
-  }
-  entries.sort((a, b) => String(b.modified || "").localeCompare(String(a.modified || "")));
-  sharedSkipped = Math.max(0, entries.length - SHARED_MAX);
-  sharedEntries = entries.slice(0, SHARED_MAX);
-
-  let checked = 0;
-  list.innerHTML = `<div class="loading">Checking links&hellip; 0/${sharedEntries.length}</div>`;
-  await mapLimit(sharedEntries, 6, async (entry) => {
-    try {
-      entry.perms = prunablePerms(await graph.listPermissions(entry.driveId, entry.itemId));
-      entry.error = null;
-    } catch (e) {
-      entry.perms = [];
-      if (entry.fromRegistry && (e.status === 404 || e.status === 403)) dropFromRegistry(entry); // item gone
-      else entry.error = e.message;
-    }
-    checked++;
-    const note = list.querySelector(".loading");
-    if (note) note.textContent = "Checking links… " + checked + "/" + sharedEntries.length;
-  });
-  for (const entry of sharedEntries) {
-    if (entry.fromRegistry && !entry.error && entry.perms.length === 0) dropFromRegistry(entry);
-  }
-  sharedLoaded = true;
-  redrawShared();
-}
-
-function redrawShared() {
-  if (!sharedLoaded) return;
-  const list = $("#shared-list");
-  const onlyNoExp = $("#shared-filter-noexp").checked;
-  list.innerHTML = "";
-  let shown = 0;
-  for (const entry of sharedEntries) {
-    const hasContent = (entry.perms && entry.perms.length > 0) || entry.error;
-    const matches = !onlyNoExp || (entry.perms || []).some((p) => p.link && !p.expirationDateTime);
-    if (!hasContent || !matches) continue;
-    list.appendChild(sharedBlock(entry));
-    shown++;
-  }
-  if (!shown) {
-    list.innerHTML = `<div class="empty">${onlyNoExp ? "No never-expiring links. Nice and tidy." : "You haven't shared anything from OneDrive."}</div>`;
-  }
-  if (sharedSkipped > 0) {
-    const note = document.createElement("div");
-    note.className = "shared-note";
-    note.textContent = "Showing the " + SHARED_MAX + " most recently modified shared items; " + sharedSkipped + " more not shown.";
-    list.appendChild(note);
-  }
-}
-
-function sharedBlock(entry) {
-  const wrap = document.createElement("div");
-  wrap.className = "shared-item";
-
-  const head = document.createElement("div");
-  head.className = "shared-head";
-  const ic = document.createElement("span");
-  ic.className = "ic";
-  ic.innerHTML = SVG_ICONS[entry.kind] || SVG_ICONS.file;
-  const nm = document.createElement("button");
-  nm.type = "button";
-  nm.className = "nm";
-  nm.textContent = entry.name;
-  nm.title = entry.name;
-  nm.addEventListener("click", () => {
-    if (entry.kind === "file") {
-      switchTab("files");
-      openDetail(entry);
-    } else if (entry.webUrl) {
-      window.open(entry.webUrl, "_blank", "noopener");
-    }
-  });
-  const dt = document.createElement("span");
-  dt.className = "dt";
-  dt.textContent = fmtDateShort(entry.modified);
-  head.append(ic, nm, dt);
-  wrap.appendChild(head);
-
-  if (entry.error) {
-    const err = document.createElement("div");
-    err.className = "shared-note";
-    err.textContent = "Couldn't read permissions: " + entry.error;
-    wrap.appendChild(err);
-    return wrap;
-  }
-
-  const refresh = async () => {
-    try {
-      entry.perms = prunablePerms(await graph.listPermissions(entry.driveId, entry.itemId));
-    } catch (e) {
-      entry.perms = [];
-    }
-    if (entry.fromRegistry && entry.perms.length === 0) dropFromRegistry(entry);
-    redrawShared();
-  };
-  for (const p of entry.perms) wrap.appendChild(permCard(entry, p, refresh));
-  return wrap;
 }
 
 // ---------- attachments ----------

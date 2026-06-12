@@ -175,53 +175,6 @@ export async function grantOnLink(sharingUrl, emails, role) {
   return data;
 }
 
-// ---- shared-by-me scan ----
-
-const DELTA_SELECT = "$select=id,name,size,webUrl,file,folder,lastModifiedDateTime,shared,parentReference,deleted";
-const DELTA_FULL = "/me/drive/root/delta?$top=500&" + DELTA_SELECT;
-
-// Scan the user's OneDrive for items carrying the "shared" facet. Pass the
-// previous result ({ items, deltaLink }) for a fast incremental scan; falls
-// back to a full rescan when the delta token has expired (410 Gone).
-export async function scanSharedItems(prev, onProgress) {
-  let items = prev && prev.deltaLink ? { ...prev.items } : {};
-  let url = prev && prev.deltaLink ? prev.deltaLink.replace(BASE, "") : DELTA_FULL;
-  let incremental = url !== DELTA_FULL;
-  for (;;) {
-    let data;
-    try {
-      ({ data } = await call(url));
-    } catch (e) {
-      if (e.status === 410 && incremental) {
-        items = {};
-        url = DELTA_FULL;
-        incremental = false;
-        continue;
-      }
-      throw e;
-    }
-    for (const raw of data.value || []) {
-      if (!raw.id) continue;
-      if (raw.deleted || !raw.shared) {
-        delete items[raw.id];
-        continue;
-      }
-      items[raw.id] = {
-        kind: raw.folder ? "folder" : "file",
-        name: raw.name,
-        size: raw.size || 0,
-        itemId: raw.id,
-        driveId: raw.parentReference && raw.parentReference.driveId,
-        webUrl: raw.webUrl,
-        modified: raw.lastModifiedDateTime
-      };
-    }
-    if (onProgress) onProgress(Object.keys(items).length);
-    if (data["@odata.nextLink"]) url = data["@odata.nextLink"].replace(BASE, "");
-    else return { items, deltaLink: data["@odata.deltaLink"] };
-  }
-}
-
 // ---- policy & admin ----
 
 export async function getUserGroups() {
