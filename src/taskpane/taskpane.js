@@ -446,7 +446,7 @@ function isPinned(item) {
   return pins.some((p) => pinKey(p) === key);
 }
 
-function togglePin(item) {
+function togglePin(item, trail = []) {
   const key = pinKey(item);
   const i = pins.findIndex((p) => pinKey(p) === key);
   if (i >= 0) {
@@ -461,7 +461,7 @@ function togglePin(item) {
       size: item.size,
       modified: item.modified,
       webUrl: item.webUrl,
-      crumbs: state.crumbs.map((c) => ({ ...c }))
+      crumbs: [...state.crumbs, ...trail].map((c) => ({ ...c }))
     });
   }
   savePins();
@@ -618,23 +618,25 @@ function renderList(items) {
   for (const item of sortItems(items)) list.appendChild(makeRow(item, 0));
 }
 
-function navigateTo(item) {
-  if (item.kind === "site") {
-    state.crumbs.push({ label: item.name, kind: "site", siteId: item.siteId });
-    loadCurrent();
-  } else if (item.kind === "drive") {
-    state.crumbs.push({ label: item.name, kind: "drive-root", driveId: item.driveId });
-    loadCurrent();
-  } else if (item.kind === "folder") {
-    state.searching = null;
-    state.crumbs.push({ label: item.name, kind: "folder", driveId: item.driveId, itemId: item.itemId });
-    loadCurrent();
-  } else {
-    openDetail(item);
-  }
+function crumbFor(item) {
+  if (item.kind === "site") return { label: item.name, kind: "site", siteId: item.siteId };
+  if (item.kind === "drive") return { label: item.name, kind: "drive-root", driveId: item.driveId };
+  return { label: item.name, kind: "folder", driveId: item.driveId, itemId: item.itemId };
 }
 
-function makeRow(item, depth) {
+// trail = crumbs for ancestors introduced by inline tree expansion, so navigating
+// (or pinning) from an expanded row keeps the full breadcrumb path
+function navigateTo(item, trail = []) {
+  if (item.kind === "file") {
+    openDetail(item);
+    return;
+  }
+  if (item.kind === "folder") state.searching = null;
+  state.crumbs.push(...trail.map((c) => ({ ...c })), crumbFor(item));
+  loadCurrent();
+}
+
+function makeRow(item, depth, trail = []) {
   const row = document.createElement("div");
   row.className = "row";
   row.dataset.depth = depth;
@@ -646,7 +648,7 @@ function makeRow(item, depth) {
   if (item.kind !== "file") {
     chev.innerHTML = SVG_CHEVRON;
     chev.setAttribute("aria-label", "Expand");
-    chev.addEventListener("click", () => toggleExpand(row, item));
+    chev.addEventListener("click", () => toggleExpand(row, item, trail));
   } else {
     chev.disabled = true;
   }
@@ -660,7 +662,7 @@ function makeRow(item, depth) {
   nm.className = "nm";
   nm.textContent = item.name;
   nm.title = item.name;
-  nm.addEventListener("click", () => navigateTo(item));
+  nm.addEventListener("click", () => navigateTo(item, trail));
 
   const dt = document.createElement("span");
   dt.className = "dt";
@@ -673,11 +675,11 @@ function makeRow(item, depth) {
     : item.kind === "folder" && item.childCount !== undefined ? String(item.childCount)
     : "";
 
-  row.append(chev, ic, nm, dt, mt, makePinBtn(item));
+  row.append(chev, ic, nm, dt, mt, makePinBtn(item, trail));
   return row;
 }
 
-function makePinBtn(item) {
+function makePinBtn(item, trail = []) {
   const btn = document.createElement("button");
   btn.type = "button";
   btn.className = "pinbtn";
@@ -688,13 +690,13 @@ function makePinBtn(item) {
   };
   sync();
   btn.addEventListener("click", () => {
-    togglePin(item);
+    togglePin(item, trail);
     sync();
   });
   return btn;
 }
 
-async function toggleExpand(row, item) {
+async function toggleExpand(row, item, trail = []) {
   if (row.classList.contains("open")) {
     row.classList.remove("open");
     const kids = row.nextElementSibling;
@@ -718,7 +720,8 @@ async function toggleExpand(row, item) {
       holder.innerHTML = `<div class="empty kids-note" style="padding-left:${pad}px">Empty</div>`;
       return;
     }
-    for (const k of sortItems(items)) holder.appendChild(makeRow(k, depth));
+    const childTrail = [...trail, crumbFor(item)];
+    for (const k of sortItems(items)) holder.appendChild(makeRow(k, depth, childTrail));
   } catch (e) {
     holder.innerHTML = `<div class="empty kids-note" style="padding-left:${pad}px">${esc(e.message)}</div>`;
   }
