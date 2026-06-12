@@ -1061,9 +1061,11 @@ function permCard(file, p, refresh) {
 
 let sharedLoaded = false;
 let sharedEntries = []; // scan + registry items, each with fetched .perms
+let sharedMap = {}; // full scan result incl. collapsed descendants
 let sharedSkipped = 0;
 const SHARED_MAX = 100;
 const REG_MAX = 200;
+const DESC_CAP = 300; // max descendants checked per "items inside" pass
 
 // localStorage survives account switches in the same pane, so every key
 // that caches account data must be scoped to the signed-in account.
@@ -1161,7 +1163,26 @@ async function loadShared(force) {
   // Collapse inherited shares: when a whole folder is shared, every item
   // inside it carries the shared facet too. Show only the topmost shared
   // item of each subtree (the one whose parent isn't itself shared).
-  const entries = Object.values(scan.items).filter((x) => !(x.parentId && scan.items[x.parentId]));
+  // Descendants stay reachable via the per-folder "items inside" check,
+  // which surfaces any with their own non-inherited links.
+  sharedMap = scan.items;
+  const childIndex = {};
+  for (const it of Object.values(sharedMap)) {
+    if (it.parentId && sharedMap[it.parentId]) (childIndex[it.parentId] = childIndex[it.parentId] || []).push(it.itemId);
+  }
+  const entries = Object.values(sharedMap).filter((x) => !(x.parentId && sharedMap[x.parentId]));
+  for (const e of entries) {
+    if (!childIndex[e.itemId]) continue;
+    const ids = [];
+    const stack = [...childIndex[e.itemId]];
+    while (stack.length) {
+      const id = stack.pop();
+      ids.push(id);
+      if (childIndex[id]) stack.push(...childIndex[id]);
+    }
+    ids.sort((a, b) => String(sharedMap[b].modified || "").localeCompare(String(sharedMap[a].modified || "")));
+    e.hiddenIds = ids;
+  }
   const seen = new Set(entries.map((x) => x.driveId + "|" + x.itemId));
   for (const r of loadRegistry()) {
     if (!seen.has(r.driveId + "|" + r.itemId)) entries.push({ ...r, fromRegistry: true });
@@ -1216,7 +1237,32 @@ function redrawShared() {
   }
 }
 
-function sharedBlock(entry) {
+// Check a collapsed folder's descendants for permissions of their own
+// (anything non-inherited would otherwise be invisible in the Shared tab).
+async function checkDescendants(entry, note) {
+  const ids = entry.hiddenIds.slice(0, DESC_CAP);
+  let done = 0;
+  note.textContent = "Checking 0/" + ids.length + "…";
+  const found = [];
+  await mapLimit(ids, 6, async (id) => {
+    const child = sharedMap[id];
+    if (child) {
+      try {
+        const perms = prunablePerms(await graph.listPermissions(child.driveId, child.itemId))
+          .filter((p) => !p.inheritedFrom);
+        if (perms.length) found.push({ ...child, perms });
+      } catch (e) { /* unreadable child; skip */ }
+    }
+    done++;
+    note.textContent = "Checking " + done + "/" + ids.length + "…";
+  });
+  entry.subChecked = true;
+  entry.subFound = found;
+  entry.subSkipped = entry.hiddenIds.length - ids.length;
+  redrawShared();
+}
+
+function sharedBlock(entry, directOnly = false) {
   const wrap = document.createElement("div");
   wrap.className = "shared-item";
 
@@ -1254,7 +1300,9 @@ function sharedBlock(entry) {
 
   const refresh = async () => {
     try {
-      entry.perms = prunablePerms(await graph.listPermissions(entry.driveId, entry.itemId));
+      let perms = prunablePerms(await graph.listPermissions(entry.driveId, entry.itemId));
+      if (directOnly) perms = perms.filter((p) => !p.inheritedFrom);
+      entry.perms = perms;
     } catch (e) {
       entry.perms = [];
     }
@@ -1262,6 +1310,37 @@ function sharedBlock(entry) {
     redrawShared();
   };
   for (const p of entry.perms) wrap.appendChild(permCard(entry, p, refresh));
+
+  if (entry.hiddenIds && entry.hiddenIds.length && !entry.subChecked) {
+    const note = document.createElement("div");
+    note.className = "shared-note";
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "link-btn";
+    btn.textContent = "Check " + entry.hiddenIds.length + " item(s) inside for their own links";
+    btn.addEventListener("click", () => {
+      btn.remove();
+      checkDescendants(entry, note);
+    });
+    note.appendChild(btn);
+    wrap.appendChild(note);
+  } else if (entry.subChecked) {
+    const sub = document.createElement("div");
+    sub.className = "shared-sub";
+    const withPerms = (entry.subFound || []).filter((c) => c.perms && c.perms.length);
+    if (!withPerms.length) {
+      sub.innerHTML = `<div class="shared-note">No items inside have links of their own.</div>`;
+    } else {
+      for (const child of withPerms) sub.appendChild(sharedBlock(child, true));
+    }
+    if (entry.subSkipped > 0) {
+      const skip = document.createElement("div");
+      skip.className = "shared-note";
+      skip.textContent = "Checked the " + DESC_CAP + " most recently modified items; " + entry.subSkipped + " more were skipped.";
+      sub.appendChild(skip);
+    }
+    wrap.appendChild(sub);
+  }
   return wrap;
 }
 
