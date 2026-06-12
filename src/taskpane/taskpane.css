@@ -252,28 +252,26 @@ h3 {
 /* shared-by-me */
 .shared-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
 .chk { display: inline-flex; align-items: center; gap: 6px; color: var(--text-2); font-size: 12px; }
-.shared-item { border-bottom: 1px solid var(--border); padding: 5px 0 2px; }
-.shared-head { display: flex; align-items: center; gap: 6px; font-size: 12px; }
-.shared-head .ic { flex: 0 0 16px; display: inline-flex; align-items: center; justify-content: center; }
-.shared-head .nm {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  text-align: left;
-  background: none;
-  border: none;
-  padding: 3px 0;
-  color: var(--text);
-  font-weight: 600;
+.shared-legend { display: flex; gap: 14px; font-size: 11px; color: var(--text-2); margin: 0 0 6px; }
+.shared-legend .sw {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  border: 1px solid var(--border);
+  margin-right: 4px;
+  vertical-align: -1px;
 }
-.shared-head .nm:hover { color: var(--primary); }
-.shared-head .dt { flex: 0 0 auto; color: var(--text-2); font-size: 11px; }
-.shared-item .perm { border-bottom: none; border-top: 1px solid #f1f1f1; margin-left: 22px; padding: 6px 0; }
+.sw.never { background: #fbe4e6; }
+.sw.dated { background: #e3f2e3; }
+.row.exp-never { background: #fdf1f2; }
+.row.exp-never:hover { background: #fbe4e6; }
+.row.exp-dated { background: #f2f9f2; }
+.row.exp-dated:hover { background: #e3f2e3; }
+.row .sum { flex: 0 0 auto; color: var(--text-2); font-size: 11px; white-space: nowrap; }
+.shared-kids { margin-left: 12px; padding-left: 6px; border-left: 2px solid var(--border); }
+.shared-kids .perm { padding: 5px 4px; }
 .shared-note { color: var(--text-2); font-size: 11px; padding: 6px 0; }
-.shared-sub { margin-left: 14px; padding-left: 8px; border-left: 2px solid var(--border); margin-top: 2px; }
-.shared-sub .shared-item { border-bottom: none; }
 .badge.warn { background: var(--danger); }
 
 /* toast */

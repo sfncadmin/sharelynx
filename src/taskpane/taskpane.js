@@ -944,8 +944,8 @@ function permCard(file, p, refresh) {
       (p.expirationDateTime ? "" : '<span class="badge warn">never expires</span>') +
       `</div>` +
       (people.length ? `<div class="sub">${esc(people.join(", "))}</div>` : "") +
-      `<div class="sub">${esc(p.link.webUrl)}</div>` +
       `<div class="actions"></div><div class="expiry-edit" hidden></div>`;
+    card.title = p.link.webUrl; // URL on hover; Copy is the real way to grab it
     const actions = card.querySelector(".actions");
 
     const copyBtn = document.createElement("button");
@@ -1060,9 +1060,9 @@ function permCard(file, p, refresh) {
 // ---------- shared-by-me (Shared tab) ----------
 
 let sharedLoaded = false;
-let sharedEntries = []; // scan + registry items, each with fetched .perms
+let sharedAll = []; // every collapsed root, sorted; perms fetched page by page
+let sharedEntries = []; // the loaded slice of sharedAll, each with fetched .perms
 let sharedMap = {}; // full scan result incl. collapsed descendants
-let sharedSkipped = 0;
 const SHARED_MAX = 100;
 const REG_MAX = 200;
 const DESC_CAP = 300; // max descendants checked per "items inside" pass
@@ -1076,8 +1076,9 @@ function acctKey(base) {
 
 function resetSharedState() {
   sharedLoaded = false;
+  sharedAll = [];
   sharedEntries = [];
-  sharedSkipped = 0;
+  sharedMap = {};
   const list = $("#shared-list");
   if (list) list.innerHTML = "";
 }
@@ -1188,12 +1189,19 @@ async function loadShared(force) {
     if (!seen.has(r.driveId + "|" + r.itemId)) entries.push({ ...r, fromRegistry: true });
   }
   entries.sort((a, b) => String(b.modified || "").localeCompare(String(a.modified || "")));
-  sharedSkipped = Math.max(0, entries.length - SHARED_MAX);
-  sharedEntries = entries.slice(0, SHARED_MAX);
+  sharedAll = entries;
+  const first = entries.slice(0, SHARED_MAX);
 
+  list.innerHTML = `<div class="loading">Checking links&hellip; 0/${first.length}</div>`;
+  await ensurePerms(first, list.querySelector(".loading"));
+  sharedEntries = first;
+  sharedLoaded = true;
+  redrawShared();
+}
+
+async function ensurePerms(batch, progressEl) {
   let checked = 0;
-  list.innerHTML = `<div class="loading">Checking links&hellip; 0/${sharedEntries.length}</div>`;
-  await mapLimit(sharedEntries, 6, async (entry) => {
+  await mapLimit(batch, 6, async (entry) => {
     try {
       entry.perms = prunablePerms(await graph.listPermissions(entry.driveId, entry.itemId));
       entry.error = null;
@@ -1203,13 +1211,18 @@ async function loadShared(force) {
       else entry.error = e.message;
     }
     checked++;
-    const note = list.querySelector(".loading");
-    if (note) note.textContent = "Checking links… " + checked + "/" + sharedEntries.length;
+    if (progressEl) progressEl.textContent = "Checking links… " + checked + "/" + batch.length;
   });
-  for (const entry of sharedEntries) {
+  for (const entry of batch) {
     if (entry.fromRegistry && !entry.error && entry.perms.length === 0) dropFromRegistry(entry);
   }
-  sharedLoaded = true;
+}
+
+async function showMoreShared(btn) {
+  btn.disabled = true;
+  const next = sharedAll.slice(sharedEntries.length, sharedEntries.length + SHARED_MAX);
+  await ensurePerms(next, btn);
+  sharedEntries = sharedEntries.concat(next);
   redrawShared();
 }
 
@@ -1223,16 +1236,22 @@ function redrawShared() {
     const hasContent = (entry.perms && entry.perms.length > 0) || entry.error;
     const matches = !onlyNoExp || (entry.perms || []).some((p) => p.link && !p.expirationDateTime);
     if (!hasContent || !matches) continue;
-    list.appendChild(sharedBlock(entry));
+    list.appendChild(sharedRow(entry));
     shown++;
   }
   if (!shown) {
     list.innerHTML = `<div class="empty">${onlyNoExp ? "No never-expiring links. Nice and tidy." : "You haven't shared anything from OneDrive."}</div>`;
   }
-  if (sharedSkipped > 0) {
+  const remaining = sharedAll.length - sharedEntries.length;
+  if (remaining > 0) {
     const note = document.createElement("div");
     note.className = "shared-note";
-    note.textContent = "Showing the " + SHARED_MAX + " most recently modified shared items; " + sharedSkipped + " more not shown.";
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "link-btn";
+    btn.textContent = "Show " + Math.min(SHARED_MAX, remaining) + " more (" + remaining + " remaining)";
+    btn.addEventListener("click", () => showMoreShared(btn));
+    note.appendChild(btn);
     list.appendChild(note);
   }
 }
@@ -1262,15 +1281,50 @@ async function checkDescendants(entry, note) {
   redrawShared();
 }
 
-function sharedBlock(entry, directOnly = false) {
-  const wrap = document.createElement("div");
-  wrap.className = "shared-item";
+// Row background class: red tint = has a never-expiring link, green = all links expire.
+function sharedRowClass(entry) {
+  const links = (entry.perms || []).filter((p) => p.link);
+  if (!links.length) return "";
+  return links.some((p) => !p.expirationDateTime) ? "exp-never" : "exp-dated";
+}
 
-  const head = document.createElement("div");
-  head.className = "shared-head";
+// Compact summary, e.g. "2 links · never" or "1 link · 6/30/26 · +1"
+function sharedSummary(entry) {
+  const perms = entry.perms || [];
+  const links = perms.filter((p) => p.link);
+  const grants = perms.length - links.length;
+  const parts = [];
+  if (links.length) {
+    const exp = links.some((p) => !p.expirationDateTime)
+      ? "never"
+      : fmtDateShort(links.map((p) => p.expirationDateTime).sort()[0]);
+    parts.push(links.length + (links.length === 1 ? " link" : " links") + " · " + exp);
+  }
+  if (grants > 0) parts.push("+" + grants);
+  if (entry.error) parts.push("error");
+  return parts.join(" · ");
+}
+
+function sharedRow(entry, directOnly = false) {
+  const frag = document.createDocumentFragment();
+  const row = document.createElement("div");
+  row.className = ("row shared-row " + sharedRowClass(entry)).trim();
+  if (entry.expanded) row.classList.add("open");
+
+  const chev = document.createElement("button");
+  chev.type = "button";
+  chev.className = "chev";
+  chev.innerHTML = SVG_CHEVRON;
+  chev.setAttribute("aria-label", "Show links");
+  chev.addEventListener("click", () => {
+    entry.expanded = !entry.expanded;
+    redrawShared();
+  });
+
   const ic = document.createElement("span");
   ic.className = "ic";
   ic.innerHTML = SVG_ICONS[entry.kind] || SVG_ICONS.file;
+
   const nm = document.createElement("button");
   nm.type = "button";
   nm.className = "nm";
@@ -1284,20 +1338,21 @@ function sharedBlock(entry, directOnly = false) {
       openExternal(entry.webUrl);
     }
   });
-  const dt = document.createElement("span");
-  dt.className = "dt";
-  dt.textContent = fmtDateShort(entry.modified);
-  head.append(ic, nm, dt);
-  wrap.appendChild(head);
 
+  const sum = document.createElement("span");
+  sum.className = "sum";
+  sum.textContent = sharedSummary(entry);
+
+  row.append(chev, ic, nm, sum);
+  frag.appendChild(row);
+
+  if (!entry.expanded) return frag;
+
+  const kids = document.createElement("div");
+  kids.className = "shared-kids";
   if (entry.error) {
-    const err = document.createElement("div");
-    err.className = "shared-note";
-    err.textContent = "Couldn't read permissions: " + entry.error;
-    wrap.appendChild(err);
-    return wrap;
+    kids.innerHTML = `<div class="shared-note">Couldn't read permissions: ${esc(entry.error)}</div>`;
   }
-
   const refresh = async () => {
     try {
       let perms = prunablePerms(await graph.listPermissions(entry.driveId, entry.itemId));
@@ -1309,7 +1364,7 @@ function sharedBlock(entry, directOnly = false) {
     if (entry.fromRegistry && entry.perms.length === 0) dropFromRegistry(entry);
     redrawShared();
   };
-  for (const p of entry.perms) wrap.appendChild(permCard(entry, p, refresh));
+  for (const p of entry.perms || []) kids.appendChild(permCard(entry, p, refresh));
 
   if (entry.hiddenIds && entry.hiddenIds.length && !entry.subChecked) {
     const note = document.createElement("div");
@@ -1323,25 +1378,23 @@ function sharedBlock(entry, directOnly = false) {
       checkDescendants(entry, note);
     });
     note.appendChild(btn);
-    wrap.appendChild(note);
+    kids.appendChild(note);
   } else if (entry.subChecked) {
-    const sub = document.createElement("div");
-    sub.className = "shared-sub";
     const withPerms = (entry.subFound || []).filter((c) => c.perms && c.perms.length);
     if (!withPerms.length) {
-      sub.innerHTML = `<div class="shared-note">No items inside have links of their own.</div>`;
+      kids.insertAdjacentHTML("beforeend", `<div class="shared-note">No items inside have links of their own.</div>`);
     } else {
-      for (const child of withPerms) sub.appendChild(sharedBlock(child, true));
+      for (const child of withPerms) kids.appendChild(sharedRow(child, true));
     }
     if (entry.subSkipped > 0) {
-      const skip = document.createElement("div");
-      skip.className = "shared-note";
-      skip.textContent = "Checked the " + DESC_CAP + " most recently modified items; " + entry.subSkipped + " more were skipped.";
-      sub.appendChild(skip);
+      kids.insertAdjacentHTML(
+        "beforeend",
+        `<div class="shared-note">Checked the ${DESC_CAP} most recently modified items; ${entry.subSkipped} more were skipped.</div>`
+      );
     }
-    wrap.appendChild(sub);
   }
-  return wrap;
+  frag.appendChild(kids);
+  return frag;
 }
 
 // ---------- attachments ----------
