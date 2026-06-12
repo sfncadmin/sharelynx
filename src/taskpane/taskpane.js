@@ -160,6 +160,7 @@ function showSigninError(msg) {
 function showApp() {
   $("#view-signin").hidden = true;
   $("#app").hidden = false;
+  resetSharedState();
   const account = getAccount();
   if (account) {
     $("#account-chip").hidden = false;
@@ -186,6 +187,7 @@ function wireUi() {
 
   $("#btn-signout").addEventListener("click", async () => {
     await signOut();
+    resetSharedState();
     $("#app").hidden = true;
     $("#account-chip").hidden = true;
     $("#view-signin").hidden = false;
@@ -1025,12 +1027,27 @@ let sharedSkipped = 0;
 const SHARED_MAX = 100;
 const REG_MAX = 200;
 
+// localStorage survives account switches in the same pane, so every key
+// that caches account data must be scoped to the signed-in account.
+function acctKey(base) {
+  const a = getAccount();
+  return base + ":" + ((a && (a.homeAccountId || a.username)) || "anon");
+}
+
+function resetSharedState() {
+  sharedLoaded = false;
+  sharedEntries = [];
+  sharedSkipped = 0;
+  const list = $("#shared-list");
+  if (list) list.innerHTML = "";
+}
+
 function loadSharedCache() {
-  try { return JSON.parse(localStorage.getItem("sfnc_shared_delta")) || null; } catch (e) { return null; }
+  try { return JSON.parse(localStorage.getItem(acctKey("sfnc_shared_delta"))) || null; } catch (e) { return null; }
 }
 
 function saveSharedCache(c) {
-  try { localStorage.setItem("sfnc_shared_delta", JSON.stringify(c)); } catch (e) { /* cache only */ }
+  try { localStorage.setItem(acctKey("sfnc_shared_delta"), JSON.stringify(c)); } catch (e) { /* cache only */ }
 }
 
 // Registry of items shared through the add-in outside the user's own OneDrive
@@ -1042,11 +1059,11 @@ function loadRegistry() {
       if (v) return JSON.parse(v);
     }
   } catch (e) { /* fall back to local */ }
-  try { return JSON.parse(localStorage.getItem("sfnc_shared_reg")) || []; } catch (e) { return []; }
+  try { return JSON.parse(localStorage.getItem(acctKey("sfnc_shared_reg"))) || []; } catch (e) { return []; }
 }
 
 function saveRegistry(reg) {
-  localStorage.setItem("sfnc_shared_reg", JSON.stringify(reg));
+  localStorage.setItem(acctKey("sfnc_shared_reg"), JSON.stringify(reg));
   if (inOutlook && Office.context.roamingSettings) {
     try {
       Office.context.roamingSettings.set("sfnc_shared_reg", JSON.stringify(reg));
