@@ -17,7 +17,7 @@ Office.js web add-in. Works in classic Outlook for Windows (M365, WebView2), new
 - **Insert into the draft** or **copy to clipboard**; recipients prefilled from To/Cc for "specific people" links
 - **Existing access**: list current links and permissions on a file, copy or insert them, edit expiration, revoke
 
-### Shared-link review (Shared tab)
+### Shared-link review (Manage Links tab)
 - Lists everything the user has shared from their OneDrive (delta scan of the `shared` facet, cached for fast incremental refreshes) plus SharePoint items shared through the add-in
 - Folder-aware: a shared folder shows as one entry, not thousands -- items inside an already-shared folder are collapsed into it
 - Every link shows audience, permission, and expiration, with a red **never expires** badge on links that have none, and a filter to show only never-expiring links
