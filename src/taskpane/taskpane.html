@@ -145,6 +145,14 @@
       <div class="btnrow">
         <button class="btn primary" id="btn-save-settings" type="button">Save settings</button>
       </div>
+
+      <div id="policy-admin-section" hidden>
+        <h3>Policy <span class="badge">Admin</span></h3>
+        <div id="policy-summary" class="policy-summary"></div>
+        <a id="policy-list-link" class="link-btn" target="_blank" rel="noopener noreferrer" hidden>Edit policy in SharePoint →</a>
+        <p class="hint">Manage the <code>SFNC_ShareLinks_Policy</code> list on your SharePoint root site. Create the list with two text columns: <strong>Title</strong> (setting key) and <strong>SettingValue</strong>. Changes take effect after the next sign-in.</p>
+        <p class="hint">Supported keys: <code>allowAnonymousLinks</code>, <code>adminOnlyAnonymousLinks</code>, <code>allowOrganizationLinks</code>, <code>allowSpecificPeopleLinks</code>, <code>defaultScope</code>, <code>defaultType</code>, <code>defaultExpDays</code>, <code>adminGroupIds</code> (comma-separated group IDs or display names).</p>
+      </div>
     </section>
   </main>
 

@@ -66,7 +66,9 @@ export async function listSites() {
 
 export async function siteDrives(siteId) {
   const { data } = await call("/sites/" + siteId + "/drives");
-  return data.value.map((d) => ({ kind: "drive", driveId: d.id, name: d.name, webUrl: d.webUrl }));
+  return data.value
+    .filter((d) => d.driveType === "documentLibrary")
+    .map((d) => ({ kind: "drive", driveId: d.id, name: d.name, webUrl: d.webUrl }));
 }
 
 function normalizeItem(raw) {
@@ -171,4 +173,61 @@ export async function grantOnLink(sharingUrl, emails, role) {
     body: { recipients: emails.map((email) => ({ email })), roles: [role] }
   });
   return data;
+}
+
+// ---- policy & admin ----
+
+export async function getUserGroups() {
+  try {
+    const { data } = await call("/me/memberOf?$select=id,displayName&$top=200");
+    return data.value || [];
+  } catch (e) {
+    return [];
+  }
+}
+
+export async function getSharePointPolicy() {
+  const CFG = window.SFNC_CONFIG || {};
+  const siteId = CFG.adminPolicySite || "root";
+  try {
+    const { data: listsData } = await call(
+      "/sites/" + siteId + "/lists?$select=id,displayName,webUrl&$top=200"
+    );
+    const list = (listsData.value || []).find((l) => l.displayName === "SFNC_ShareLinks_Policy");
+    if (!list) return null;
+    const { data: itemsData } = await call(
+      "/sites/" + siteId + "/lists/" + list.id +
+      "/items?$expand=fields($select=Title,SettingValue)&$select=fields&$top=200"
+    );
+    const raw = {};
+    for (const item of (itemsData.value || [])) {
+      const f = item.fields;
+      if (f && f.Title) raw[f.Title] = f.SettingValue !== undefined ? f.SettingValue : "";
+    }
+    return { _listUrl: list.webUrl, _raw: raw };
+  } catch (e) {
+    return null;
+  }
+}
+
+export async function getTenantSharingDefaults() {
+  try {
+    const { data } = await call("/admin/sharepoint/settings");
+    return {
+      defaultScope: mapSpScope(data.defaultSharingLinkType),
+      defaultType: data.defaultLinkPermission === "edit" ? "edit" : "view",
+      allowAnonymousLinks: data.sharingCapability !== "disabled",
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
+function mapSpScope(linkType) {
+  if (!linkType) return null;
+  const lt = linkType.toLowerCase();
+  if (lt === "anonymous") return "anonymous";
+  if (lt === "direct") return "users";
+  if (lt === "internal") return "organization";
+  return null;
 }

@@ -22,7 +22,7 @@ export async function initAuth() {
   const config = {
     auth: {
       clientId: CFG.clientId,
-      authority: "https://login.microsoftonline.com/" + (CFG.tenantId || "common"),
+      authority: "https://login.microsoftonline.com/" + (CFG.tenantId || "organizations"),
       // resolve against the current page so it works at a domain root or a /repo/ subpath
       redirectUri: new URL("../auth-redirect.html", location.href).href
     },
