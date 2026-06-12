@@ -65,7 +65,13 @@ if ($list) {
 }
 
 $seed = @{}
-foreach ($k in $Settings.Keys) { $seed[$k] = [string]$Settings[$k] }
+foreach ($k in $Settings.Keys) {
+    $v = [string]$Settings[$k]
+    # The add-in parser compares lowercase "true"/"false"; PowerShell $true/$false
+    # stringify as "True"/"False" and would silently fail to apply.
+    if ($v -match '^(True|False)$') { $v = $v.ToLower() }
+    $seed[$k] = $v
+}
 if ($AdminGroupIds) { $seed["adminGroupIds"] = $AdminGroupIds }
 
 if ($seed.Count -eq 0) {
