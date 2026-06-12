@@ -123,23 +123,63 @@ h3 {
 .breadcrumb .sep { color: var(--border); }
 .breadcrumb .current { font-weight: 600; color: var(--text); padding: 1px 3px; }
 
-/* lists */
+/* lists (compact, explorer-style) */
 .list { border-top: 1px solid var(--border); }
 .row {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 5px;
   width: 100%;
+  border-bottom: 1px solid #f1f1f1;
+  padding: 2px 4px;
+  font-size: 12px;
+}
+.row:hover { background: var(--bg-hover); }
+.row .chev {
+  flex: 0 0 14px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--text-2);
+}
+.row .chev:disabled { visibility: hidden; }
+.row .chev svg { transition: transform 0.1s; }
+.row.open > .chev svg { transform: rotate(90deg); }
+.row .ic { flex: 0 0 16px; display: inline-flex; align-items: center; justify-content: center; }
+.row .nm {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   text-align: left;
   background: none;
   border: none;
-  border-bottom: 1px solid var(--border);
-  padding: 8px 4px;
+  padding: 3px 0;
+  color: var(--text);
 }
-.row:hover { background: var(--bg-hover); }
-.row .ic { flex: 0 0 auto; width: 18px; text-align: center; }
-.row .nm { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.row .mt { flex: 0 0 auto; color: var(--text-2); font-size: 11px; }
+.row .nm:hover { color: var(--primary); }
+.row .dt { flex: 0 0 48px; text-align: right; color: var(--text-2); font-size: 11px; }
+.row .mt { flex: 0 0 52px; text-align: right; color: var(--text-2); font-size: 11px; overflow: hidden; white-space: nowrap; }
+.row .pinbtn {
+  flex: 0 0 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  padding: 0;
+  color: #c8c8c8;
+}
+.row .pinbtn:hover { color: #e3a008; }
+.kids-note { padding-top: 3px; padding-bottom: 3px; font-size: 11px; }
+
+/* pinned section */
+#pinned-section h3 { margin-top: 4px; }
 .empty { padding: 18px 4px; color: var(--text-2); }
 .loading { padding: 18px 4px; color: var(--text-2); font-style: italic; }
 
