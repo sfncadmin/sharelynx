@@ -282,15 +282,28 @@ function parsePolicy(raw) {
   return p;
 }
 
+function enforcePolicyScope(scope) {
+  const allowAnon = policy.allowAnonymousLinks && (!policy.adminOnlyAnonymousLinks || isAdmin);
+  if (scope === "anonymous" && !allowAnon) scope = "organization";
+  if (scope === "organization" && !policy.allowOrganizationLinks) scope = "users";
+  if (scope === "users" && !policy.allowSpecificPeopleLinks) scope = "organization";
+  return scope;
+}
+
 function applyPolicyToUI() {
   const allowAnon = policy.allowAnonymousLinks && (!policy.adminOnlyAnonymousLinks || isAdmin);
   for (const selId of ["opt-scope", "set-scope"]) {
     const sel = $("#" + selId);
     if (!sel) continue;
     const anonOpt = sel.querySelector('option[value="anonymous"]');
+    const orgOpt = sel.querySelector('option[value="organization"]');
+    const usersOpt = sel.querySelector('option[value="users"]');
     if (anonOpt) anonOpt.hidden = !allowAnon;
-    if (!allowAnon && sel.value === "anonymous") {
-      sel.value = "organization";
+    if (orgOpt) orgOpt.hidden = !policy.allowOrganizationLinks;
+    if (usersOpt) usersOpt.hidden = !policy.allowSpecificPeopleLinks;
+    const clamped = enforcePolicyScope(sel.value);
+    if (clamped !== sel.value) {
+      sel.value = clamped;
       if (selId === "opt-scope") onScopeChange();
     }
   }
@@ -441,7 +454,7 @@ async function openDetail(file) {
   $("#detail-name").textContent = file.name;
   $("#detail-meta").textContent = [fmtSize(file.size), file.modified ? "modified " + fmtDate(file.modified) : ""].filter(Boolean).join(" · ");
 
-  $("#opt-scope").value = settings.scope;
+  $("#opt-scope").value = enforcePolicyScope(settings.scope);
   $("#opt-type").value = settings.type;
   $("#opt-password").value = "";
   $("#opt-expiry").value = settings.expDays > 0 ? datePlusDays(settings.expDays) : "";
@@ -526,6 +539,7 @@ async function createFromDetail(insert) {
   const file = state.file;
   if (!file) return;
   const opts = readLinkOptions();
+  opts.scope = enforcePolicyScope(opts.scope);
   const btn = insert ? $("#btn-create-insert") : $("#btn-create-copy");
   btn.disabled = true;
   try {
@@ -782,7 +796,7 @@ async function convertSelectedAttachments() {
 
   // attachment conversions use the default link settings; "specific people"
   // defaults fall back to org-wide links when there are no recipients yet
-  let scope = settings.scope;
+  let scope = enforcePolicyScope(settings.scope);
   let recipients = [];
   const notes = [];
   if (scope === "users") {

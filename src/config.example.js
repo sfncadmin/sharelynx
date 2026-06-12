@@ -7,6 +7,9 @@ window.SFNC_CONFIG = {
   // Set it to restrict sign-in to your organization only.
   // tenantId: "<entra-tenant-id>",
   scopes: ["User.Read", "Files.ReadWrite.All", "Sites.Read.All", "GroupMember.Read.All"],
+  // To also mirror the tenant's SharePoint admin sharing defaults when no policy list exists,
+  // add "SharePointTenantSettings.Read.All" to scopes and re-run the setup script.
+  // Requires SharePoint admin consent. App works fine without it (call is silently skipped).
   // Optional: SharePoint site ID containing the SFNC_ShareLinks_Policy list.
   // Omit to use the root site. Admins: find a site's ID at
   //   GET https://graph.microsoft.com/v1.0/sites/<hostname>:/<path>
