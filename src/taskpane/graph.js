@@ -231,3 +231,20 @@ function mapSpScope(linkType) {
   if (lt === "internal") return "organization";
   return null;
 }
+
+// Home directory: read the user's Exchange custom attribute (extensionAttribute1-15).
+export async function getHomeAttribute(attrNum) {
+  try {
+    const { data } = await call("/me?$select=onPremisesExtensionAttributes");
+    const attrs = data.onPremisesExtensionAttributes || {};
+    return attrs["extensionAttribute" + attrNum] || null;
+  } catch (e) {
+    return null;
+  }
+}
+
+export async function itemByPath(driveId, path) {
+  const enc = path.split("/").map(encodeURIComponent).join("/");
+  const { data } = await call("/drives/" + driveId + "/root:/" + enc);
+  return normalizeItem(data);
+}

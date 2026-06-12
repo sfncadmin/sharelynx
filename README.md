@@ -16,6 +16,23 @@ Office.js web add-in — works in classic Outlook for Windows (M365, WebView2), 
 | On-send Smart Alert when attachments exceed a size threshold | automatic (OnMessageSend) |
 | Defaults: audience, permission, expiration days, upload folder, alert threshold | Settings tab |
 
+## Tenant policy & home directory (optional)
+
+Admins can shape the add-in per tenant without code changes (the full key list shows in the
+Settings tab for admins):
+
+- **Policy list:** create a SharePoint list named `SFNC_ShareLinks_Policy` on the root site
+  (text columns: `Title` = key, `SettingValue` = value). Keys control which link audiences are
+  allowed (e.g. `allowAnonymousLinks` = `false`), defaults, and admin groups (`adminGroupIds`).
+- **Home directory:** land users directly in "their" document library when they open the
+  SharePoint tab. Per user: set an Exchange custom attribute (slot 10 by default; change with
+  the `homeAttribute` policy key) to a path like `VSTH Files/Documents/PROJECTS`, e.g.
+  `Set-Mailbox jdoe -CustomAttribute10 "VSTH Files/Documents"`. Per group: add a policy row
+  `spHome:<group name or ID>` with the same path format. The user attribute wins over group
+  rules, and users can always navigate back up to all sites.
+- **Pinned shortcuts:** users can pin sites, libraries, folders, and files (star icon on each
+  row); pins follow the user across devices via Outlook roaming settings.
+
 ## Hosting model
 
 The add-in is a pure static frontend. Two ways to host it:

@@ -23,6 +23,12 @@ function fmtDate(iso) {
   return isNaN(d) ? "" : d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 }
 
+function fmtDateShort(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return isNaN(d) ? "" : d.toLocaleDateString(undefined, { month: "numeric", day: "numeric", year: "2-digit" });
+}
+
 let toastTimer = null;
 function toast(msg, isError = false) {
   const el = $("#toast");
@@ -65,6 +71,8 @@ const DEFAULT_POLICY = {
   defaultType: null,
   defaultExpDays: null,
   adminGroupIds: [],
+  homeAttribute: 10,
+  spHomes: {},
   loaded: false,
   _listUrl: null,
 };
@@ -72,6 +80,9 @@ const DEFAULT_POLICY = {
 let settings = loadSettings();
 let policy = { ...DEFAULT_POLICY };
 let isAdmin = false;
+let homePath = null; // "Site/Library/sub/folders" from user attribute or spHome group rule
+let homeCrumbs = null; // resolved crumb trail, cached per session
+let pins = [];
 let inOutlook = false;
 let composeMode = false;
 const state = {
@@ -116,6 +127,7 @@ if (typeof Office !== "undefined" && Office.onReady) {
 
 async function boot() {
   wireUi();
+  pins = loadPins();
   if (!composeMode) {
     $("#tab-btn-attachments").hidden = true;
     $("#btn-create-insert").hidden = true;
@@ -153,6 +165,7 @@ function showApp() {
     $("#account-chip").hidden = false;
     $("#account-name").textContent = account.name || account.username;
   }
+  renderPins();
   loadCurrent();
   if (composeMode) refreshAttachments();
   renderSettingsForm();
@@ -198,7 +211,8 @@ function wireUi() {
         : [];
       $("#search-row").hidden = state.source !== "onedrive";
       closeDetail();
-      loadCurrent();
+      if (state.source === "sharepoint" && homePath) gotoHome();
+      else loadCurrent();
     });
   });
 
@@ -250,11 +264,20 @@ async function loadTenantPolicy() {
     }
   }
 
-  if (policy.adminGroupIds.length > 0) {
+  // home directory: per-user attribute wins, then group-based spHome rules
+  homePath = await graph.getHomeAttribute(policy.homeAttribute);
+  homeCrumbs = null;
+
+  const needGroups = policy.adminGroupIds.length > 0 || (!homePath && Object.keys(policy.spHomes).length > 0);
+  if (needGroups) {
     const groups = await graph.getUserGroups();
     const groupIds = new Set(groups.map((g) => g.id));
     const groupNames = new Set(groups.map((g) => (g.displayName || "").toLowerCase()));
     isAdmin = policy.adminGroupIds.some((id) => groupIds.has(id) || groupNames.has(id.toLowerCase()));
+    if (!homePath) {
+      const key = Object.keys(policy.spHomes).find((k) => groupIds.has(k) || groupNames.has(k.toLowerCase()));
+      if (key) homePath = policy.spHomes[key];
+    }
   }
 
   if (!localStorage.getItem("sfnc_settings")) {
@@ -279,6 +302,14 @@ function parsePolicy(raw) {
   if (r.defaultType) p.defaultType = r.defaultType;
   if (r.defaultExpDays) p.defaultExpDays = parseInt(r.defaultExpDays, 10) || null;
   if (r.adminGroupIds) p.adminGroupIds = r.adminGroupIds.split(",").map((s) => s.trim()).filter(Boolean);
+  if (r.homeAttribute) p.homeAttribute = parseInt(r.homeAttribute, 10) || DEFAULT_POLICY.homeAttribute;
+  p.spHomes = {};
+  for (const key of Object.keys(r)) {
+    if (key.startsWith("spHome:")) {
+      const g = key.slice("spHome:".length).trim();
+      if (g && r[key]) p.spHomes[g] = String(r[key]).trim();
+    }
+  }
   return p;
 }
 
@@ -325,6 +356,8 @@ function renderPolicySection() {
     ...(policy.defaultType ? [["Default permission override", policy.defaultType]] : []),
     ...(policy.defaultExpDays !== null ? [["Default expiry override (days)", String(policy.defaultExpDays)]] : []),
     ["Admin groups", policy.adminGroupIds.length ? policy.adminGroupIds.join(", ") : "None configured"],
+    ["Home attribute", "extensionAttribute" + policy.homeAttribute],
+    ...Object.entries(policy.spHomes).map(([g, t]) => ["Home (" + g + ")", t]),
   ];
   summary.innerHTML = rows
     .map(([label, value]) => `<div class="policy-row"><span>${esc(label)}</span><span class="policy-val">${esc(value)}</span></div>`)
@@ -334,6 +367,162 @@ function renderPolicySection() {
     link.href = policy._listUrl;
     link.hidden = false;
   }
+}
+
+// ---------- home directory ----------
+
+async function gotoHome() {
+  const list = $("#file-list");
+  list.innerHTML = `<div class="loading">Loading&hellip;</div>`;
+  try {
+    if (!homeCrumbs) homeCrumbs = await resolveHomeCrumbs(homePath);
+    state.crumbs = homeCrumbs.map((c) => ({ ...c }));
+  } catch (e) {
+    state.crumbs = [{ label: "Sites", kind: "sites" }];
+  }
+  loadCurrent();
+}
+
+// "Site Name/Library Name/sub/folders" -> breadcrumb trail (best effort:
+// stops at the deepest level that resolves, falls back to the site list)
+async function resolveHomeCrumbs(path) {
+  const segs = String(path).split("/").map((s) => s.trim()).filter(Boolean);
+  const sites = await graph.listSites();
+  const site = sites.find((s) => (s.name || "").toLowerCase() === (segs[0] || "").toLowerCase());
+  if (!site) throw new Error('Home site "' + segs[0] + '" not found');
+  const crumbs = [{ label: "Sites", kind: "sites" }, { label: site.name, kind: "site", siteId: site.siteId }];
+  if (segs.length < 2) return crumbs;
+  const drives = await graph.siteDrives(site.siteId);
+  const drive = drives.find((d) => (d.name || "").toLowerCase() === segs[1].toLowerCase());
+  if (!drive) return crumbs;
+  crumbs.push({ label: drive.name, kind: "drive-root", driveId: drive.driveId });
+  let sub = "";
+  for (const seg of segs.slice(2)) {
+    sub += (sub ? "/" : "") + seg;
+    let item;
+    try {
+      item = await graph.itemByPath(drive.driveId, sub);
+    } catch (e) {
+      break;
+    }
+    if (item.kind !== "folder") break;
+    crumbs.push({ label: item.name, kind: "folder", driveId: drive.driveId, itemId: item.itemId });
+  }
+  return crumbs;
+}
+
+// ---------- pinned shortcuts ----------
+
+function loadPins() {
+  try {
+    if (inOutlook && Office.context.roamingSettings) {
+      const v = Office.context.roamingSettings.get("sfnc_pins");
+      if (v) return JSON.parse(v);
+    }
+  } catch (e) { /* fall back to local */ }
+  try {
+    return JSON.parse(localStorage.getItem("sfnc_pins")) || [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function savePins() {
+  localStorage.setItem("sfnc_pins", JSON.stringify(pins));
+  if (inOutlook && Office.context.roamingSettings) {
+    try {
+      Office.context.roamingSettings.set("sfnc_pins", JSON.stringify(pins));
+      Office.context.roamingSettings.saveAsync(() => {});
+    } catch (e) { /* non-fatal */ }
+  }
+}
+
+function pinKey(p) {
+  return [p.kind, p.driveId || p.siteId || "", p.itemId || ""].join("|");
+}
+
+function isPinned(item) {
+  const key = pinKey(item);
+  return pins.some((p) => pinKey(p) === key);
+}
+
+function togglePin(item, trail = []) {
+  const key = pinKey(item);
+  const i = pins.findIndex((p) => pinKey(p) === key);
+  if (i >= 0) {
+    pins.splice(i, 1);
+  } else {
+    pins.push({
+      kind: item.kind,
+      label: item.name || item.label,
+      driveId: item.driveId,
+      itemId: item.itemId,
+      siteId: item.siteId,
+      size: item.size,
+      modified: item.modified,
+      webUrl: item.webUrl,
+      crumbs: [...state.crumbs, ...trail].map((c) => ({ ...c }))
+    });
+  }
+  savePins();
+  renderPins();
+}
+
+function renderPins() {
+  const section = $("#pinned-section");
+  const list = $("#pinned-list");
+  if (!section || !list) return;
+  section.hidden = pins.length === 0;
+  list.innerHTML = "";
+  for (const p of pins) {
+    const row = document.createElement("div");
+    row.className = "row";
+    const ic = document.createElement("span");
+    ic.className = "ic";
+    ic.innerHTML = SVG_ICONS[p.kind] || SVG_ICONS.file;
+    const nm = document.createElement("button");
+    nm.type = "button";
+    nm.className = "nm";
+    nm.textContent = p.label;
+    nm.title = p.label;
+    nm.addEventListener("click", () => openPin(p));
+    const un = document.createElement("button");
+    un.type = "button";
+    un.className = "pinbtn";
+    un.innerHTML = SVG_PIN_ON;
+    un.title = "Unpin";
+    un.addEventListener("click", () => {
+      togglePin(p);
+      loadCurrent(); // refresh stars in the main list
+    });
+    row.append(ic, nm, un);
+    list.appendChild(row);
+  }
+}
+
+function setSourceUI(source) {
+  state.source = source;
+  document.querySelectorAll(".seg").forEach((b) => b.classList.toggle("active", b.dataset.source === source));
+  $("#search-row").hidden = source !== "onedrive";
+}
+
+function openPin(p) {
+  if (p.kind === "file") {
+    openDetail({ kind: "file", name: p.label, driveId: p.driveId, itemId: p.itemId, size: p.size, modified: p.modified, webUrl: p.webUrl });
+    return;
+  }
+  closeDetail();
+  state.searching = null;
+  $("#search-input").value = "";
+  const base = (p.crumbs || []).map((c) => ({ ...c }));
+  const first = base[0];
+  setSourceUI(first && first.kind === "od-root" ? "onedrive" : "sharepoint");
+  const self =
+    p.kind === "site" ? { label: p.label, kind: "site", siteId: p.siteId }
+    : p.kind === "drive" ? { label: p.label, kind: "drive-root", driveId: p.driveId }
+    : { label: p.label, kind: "folder", driveId: p.driveId, itemId: p.itemId };
+  state.crumbs = [...base, self];
+  loadCurrent();
 }
 
 // ---------- file browser ----------
@@ -404,7 +593,20 @@ function renderBreadcrumb() {
   });
 }
 
-const ICONS = { site: "🌐", drive: "📚", folder: "📁", file: "📄" };
+const SVG_ICONS = {
+  site: '<svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true"><circle cx="10" cy="10" r="7.5" fill="none" stroke="#0f6cbd" stroke-width="1.4"/><path d="M2.5 10h15M10 2.5c-2.5 2.4-2.5 12.6 0 15M10 2.5c2.5 2.4 2.5 12.6 0 15" fill="none" stroke="#0f6cbd" stroke-width="1.1"/></svg>',
+  drive: '<svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true"><rect x="3" y="4" width="14" height="4.5" rx="1" fill="none" stroke="#0f6cbd" stroke-width="1.4"/><rect x="3" y="11" width="14" height="4.5" rx="1" fill="none" stroke="#0f6cbd" stroke-width="1.4"/></svg>',
+  folder: '<svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true"><path d="M2.5 5A1.5 1.5 0 0 1 4 3.5h4l1.8 2H16A1.5 1.5 0 0 1 17.5 7v7.5A1.5 1.5 0 0 1 16 16H4a1.5 1.5 0 0 1-1.5-1.5z" fill="#ffce3e" stroke="#e8b931" stroke-width="0.8"/></svg>',
+  file: '<svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true"><path d="M5.5 2.5h6.5l3.5 3.5v11a.5.5 0 0 1-.5.5H5.5a.5.5 0 0 1-.5-.5v-14a.5.5 0 0 1 .5-.5z" fill="#fff" stroke="#9a9a9a" stroke-width="1.1"/><path d="M12 2.5L15.5 6H12z" fill="#d4d4d4"/></svg>'
+};
+const SVG_CHEVRON = '<svg viewBox="0 0 16 16" width="10" height="10" aria-hidden="true"><path d="M5.5 3.5l5 4.5-5 4.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const SVG_PIN = '<svg viewBox="0 0 20 20" width="13" height="13" aria-hidden="true"><path d="M10 2.8l2.1 4.3 4.7.7-3.4 3.3.8 4.7L10 13.6l-4.2 2.2.8-4.7-3.4-3.3 4.7-.7z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>';
+const SVG_PIN_ON = '<svg viewBox="0 0 20 20" width="13" height="13" aria-hidden="true"><path d="M10 2.8l2.1 4.3 4.7.7-3.4 3.3.8 4.7L10 13.6l-4.2 2.2.8-4.7-3.4-3.3 4.7-.7z" fill="#e3a008" stroke="#e3a008" stroke-width="1.3" stroke-linejoin="round"/></svg>';
+
+function sortItems(items) {
+  const rank = (x) => ({ site: 0, drive: 0, folder: 1, file: 2 }[x.kind] ?? 3);
+  return [...items].sort((a, b) => rank(a) - rank(b));
+}
 
 function renderList(items) {
   const list = $("#file-list");
@@ -413,35 +615,115 @@ function renderList(items) {
     list.innerHTML = `<div class="empty">Nothing here.</div>`;
     return;
   }
-  const sorted = [...items].sort((a, b) => {
-    const rank = (x) => ({ site: 0, drive: 0, folder: 1, file: 2 }[x.kind] ?? 3);
-    return rank(a) - rank(b);
+  for (const item of sortItems(items)) list.appendChild(makeRow(item, 0));
+}
+
+function crumbFor(item) {
+  if (item.kind === "site") return { label: item.name, kind: "site", siteId: item.siteId };
+  if (item.kind === "drive") return { label: item.name, kind: "drive-root", driveId: item.driveId };
+  return { label: item.name, kind: "folder", driveId: item.driveId, itemId: item.itemId };
+}
+
+// trail = crumbs for ancestors introduced by inline tree expansion, so navigating
+// (or pinning) from an expanded row keeps the full breadcrumb path
+function navigateTo(item, trail = []) {
+  if (item.kind === "file") {
+    openDetail(item);
+    return;
+  }
+  if (item.kind === "folder") state.searching = null;
+  state.crumbs.push(...trail.map((c) => ({ ...c })), crumbFor(item));
+  loadCurrent();
+}
+
+function makeRow(item, depth, trail = []) {
+  const row = document.createElement("div");
+  row.className = "row";
+  row.dataset.depth = depth;
+  row.style.paddingLeft = 4 + depth * 14 + "px";
+
+  const chev = document.createElement("button");
+  chev.type = "button";
+  chev.className = "chev";
+  if (item.kind !== "file") {
+    chev.innerHTML = SVG_CHEVRON;
+    chev.setAttribute("aria-label", "Expand");
+    chev.addEventListener("click", () => toggleExpand(row, item, trail));
+  } else {
+    chev.disabled = true;
+  }
+
+  const ic = document.createElement("span");
+  ic.className = "ic";
+  ic.innerHTML = SVG_ICONS[item.kind] || SVG_ICONS.file;
+
+  const nm = document.createElement("button");
+  nm.type = "button";
+  nm.className = "nm";
+  nm.textContent = item.name;
+  nm.title = item.name;
+  nm.addEventListener("click", () => navigateTo(item, trail));
+
+  const dt = document.createElement("span");
+  dt.className = "dt";
+  dt.textContent = fmtDateShort(item.modified);
+
+  const mt = document.createElement("span");
+  mt.className = "mt";
+  mt.textContent =
+    item.kind === "file" ? fmtSize(item.size)
+    : item.kind === "folder" && item.childCount !== undefined ? String(item.childCount)
+    : "";
+
+  row.append(chev, ic, nm, dt, mt, makePinBtn(item, trail));
+  return row;
+}
+
+function makePinBtn(item, trail = []) {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "pinbtn";
+  const sync = () => {
+    const on = isPinned(item);
+    btn.innerHTML = on ? SVG_PIN_ON : SVG_PIN;
+    btn.title = on ? "Unpin" : "Pin";
+  };
+  sync();
+  btn.addEventListener("click", () => {
+    togglePin(item, trail);
+    sync();
   });
-  for (const item of sorted) {
-    const row = document.createElement("button");
-    row.type = "button";
-    row.className = "row";
-    const meta =
-      item.kind === "file" ? fmtSize(item.size)
-      : item.kind === "folder" && item.childCount !== undefined ? item.childCount + " items"
-      : "";
-    row.innerHTML = `<span class="ic">${ICONS[item.kind] || "📄"}</span><span class="nm">${esc(item.name)}</span><span class="mt">${esc(meta)}</span>`;
-    row.addEventListener("click", () => {
-      if (item.kind === "site") {
-        state.crumbs.push({ label: item.name, kind: "site", siteId: item.siteId });
-        loadCurrent();
-      } else if (item.kind === "drive") {
-        state.crumbs.push({ label: item.name, kind: "drive-root", driveId: item.driveId });
-        loadCurrent();
-      } else if (item.kind === "folder") {
-        state.searching = null;
-        state.crumbs.push({ label: item.name, kind: "folder", driveId: item.driveId, itemId: item.itemId });
-        loadCurrent();
-      } else {
-        openDetail(item);
-      }
-    });
-    list.appendChild(row);
+  return btn;
+}
+
+async function toggleExpand(row, item, trail = []) {
+  if (row.classList.contains("open")) {
+    row.classList.remove("open");
+    const kids = row.nextElementSibling;
+    if (kids && kids.classList.contains("kids")) kids.remove();
+    return;
+  }
+  row.classList.add("open");
+  const depth = Number(row.dataset.depth) + 1;
+  const pad = 4 + depth * 14;
+  const holder = document.createElement("div");
+  holder.className = "kids";
+  holder.innerHTML = `<div class="loading kids-note" style="padding-left:${pad}px">Loading&hellip;</div>`;
+  row.after(holder);
+  try {
+    let items;
+    if (item.kind === "site") items = await graph.siteDrives(item.siteId);
+    else if (item.kind === "drive") items = await graph.driveChildren(item.driveId, "root");
+    else items = await graph.driveChildren(item.driveId, item.itemId);
+    holder.innerHTML = "";
+    if (!items.length) {
+      holder.innerHTML = `<div class="empty kids-note" style="padding-left:${pad}px">Empty</div>`;
+      return;
+    }
+    const childTrail = [...trail, crumbFor(item)];
+    for (const k of sortItems(items)) holder.appendChild(makeRow(k, depth, childTrail));
+  } catch (e) {
+    holder.innerHTML = `<div class="empty kids-note" style="padding-left:${pad}px">${esc(e.message)}</div>`;
   }
 }
 
