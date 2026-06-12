@@ -272,6 +272,8 @@ h3 {
 .shared-head .dt { flex: 0 0 auto; color: var(--text-2); font-size: 11px; }
 .shared-item .perm { border-bottom: none; border-top: 1px solid #f1f1f1; margin-left: 22px; padding: 6px 0; }
 .shared-note { color: var(--text-2); font-size: 11px; padding: 6px 0; }
+.shared-sub { margin-left: 14px; padding-left: 8px; border-left: 2px solid var(--border); margin-top: 2px; }
+.shared-sub .shared-item { border-bottom: none; }
 .badge.warn { background: var(--danger); }
 
 /* toast */

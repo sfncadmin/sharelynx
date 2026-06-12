@@ -19,8 +19,9 @@ Office.js web add-in. Works in classic Outlook for Windows (M365, WebView2), new
 
 ### Shared-link review (Shared tab)
 - Lists everything the user has shared from their OneDrive (delta scan of the `shared` facet, cached for fast incremental refreshes) plus SharePoint items shared through the add-in
+- Folder-aware: a shared folder shows as one entry, not thousands -- items inside an already-shared folder are collapsed into it
 - Every link shows audience, permission, and expiration, with a red **never expires** badge on links that have none, and a filter to show only never-expiring links
-- Prune in place: copy, edit/clear expiration, or revoke any link or direct grant without leaving the pane
+- Prune in place: copy, edit/clear expiration, open the item's folder in OneDrive web, or revoke any link or direct grant without leaving the pane
 
 ### Attachments
 - **Convert attachments to links** (Attachments tab): uploads selected draft attachments to OneDrive, replaces them with sharing links created with the user's default link settings, and removes the attachments

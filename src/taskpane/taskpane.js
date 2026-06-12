@@ -39,6 +39,14 @@ function toast(msg, isError = false) {
   toastTimer = setTimeout(() => { el.hidden = true; }, isError ? 9000 : 4000);
 }
 
+// Open a URL in the system browser; window.open is unreliable in some Office webviews.
+function openExternal(url) {
+  if (inOutlook && Office.context.ui && Office.context.ui.openBrowserWindow) {
+    try { Office.context.ui.openBrowserWindow(url); return; } catch (e) { /* fall through */ }
+  }
+  window.open(url, "_blank", "noopener");
+}
+
 async function copyText(text) {
   try {
     await navigator.clipboard.writeText(text);
@@ -898,6 +906,24 @@ function renderPermissions(perms) {
   for (const p of perms) list.appendChild(permCard(state.file, p, loadPermissions));
 }
 
+// Open an item's containing folder in OneDrive/SharePoint on the web
+// (folders open themselves). Local Explorer isn't reachable from the
+// sandboxed pane, so the web view is the best we can do.
+async function openInFolder(file) {
+  try {
+    const it = await graph.getItem(file.driveId, file.itemId);
+    let url = it.folder ? it.webUrl : null;
+    if (!url && it.parentReference && it.parentReference.id) {
+      const parent = await graph.getItem(file.driveId, it.parentReference.id);
+      url = parent.webUrl;
+    }
+    if (url) openExternal(url);
+    else toast("Couldn't resolve this item's folder.", true);
+  } catch (e) {
+    toast("Couldn't open folder: " + e.message, true);
+  }
+}
+
 // One permission/link card with copy/insert/expiration/remove actions.
 // Used by both the file detail view and the Shared tab; refresh is called
 // after any change (revoke, expiration update).
@@ -969,6 +995,7 @@ function permCard(file, p, refresh) {
     });
     actions.appendChild(expBtn);
 
+    actions.appendChild(folderBtn());
     actions.appendChild(removeBtn(p));
   } else {
     const who =
@@ -979,9 +1006,20 @@ function permCard(file, p, refresh) {
       `<div class="who">👤 ${esc(who)}</div>` +
       `<div class="sub">${esc((p.roles || []).join(", "))}${p.inheritedFrom ? " · inherited" : ""}</div>` +
       `<div class="actions"></div>`;
-    if (!isOwner && !p.inheritedFrom) card.querySelector(".actions").appendChild(removeBtn(p));
+    const actions = card.querySelector(".actions");
+    actions.appendChild(folderBtn());
+    if (!isOwner && !p.inheritedFrom) actions.appendChild(removeBtn(p));
   }
   return card;
+
+  function folderBtn() {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "link-btn";
+    btn.textContent = "Open folder";
+    btn.addEventListener("click", () => openInFolder(file));
+    return btn;
+  }
 
   function removeBtn(p) {
     // window.confirm is unreliable inside Office webviews; use two-click confirm
@@ -1023,9 +1061,11 @@ function permCard(file, p, refresh) {
 
 let sharedLoaded = false;
 let sharedEntries = []; // scan + registry items, each with fetched .perms
+let sharedMap = {}; // full scan result incl. collapsed descendants
 let sharedSkipped = 0;
 const SHARED_MAX = 100;
 const REG_MAX = 200;
+const DESC_CAP = 300; // max descendants checked per "items inside" pass
 
 // localStorage survives account switches in the same pane, so every key
 // that caches account data must be scoped to the signed-in account.
@@ -1042,12 +1082,17 @@ function resetSharedState() {
   if (list) list.innerHTML = "";
 }
 
+const SHARED_CACHE_V = 2; // v2: entries carry parentId for folder collapsing
+
 function loadSharedCache() {
-  try { return JSON.parse(localStorage.getItem(acctKey("sfnc_shared_delta"))) || null; } catch (e) { return null; }
+  try {
+    const c = JSON.parse(localStorage.getItem(acctKey("sfnc_shared_delta")));
+    return c && c.v === SHARED_CACHE_V ? c : null;
+  } catch (e) { return null; }
 }
 
 function saveSharedCache(c) {
-  try { localStorage.setItem(acctKey("sfnc_shared_delta"), JSON.stringify(c)); } catch (e) { /* cache only */ }
+  try { localStorage.setItem(acctKey("sfnc_shared_delta"), JSON.stringify({ ...c, v: SHARED_CACHE_V })); } catch (e) { /* cache only */ }
 }
 
 // Registry of items shared through the add-in outside the user's own OneDrive
@@ -1115,7 +1160,29 @@ async function loadShared(force) {
   }
   saveSharedCache(scan);
 
-  const entries = Object.values(scan.items);
+  // Collapse inherited shares: when a whole folder is shared, every item
+  // inside it carries the shared facet too. Show only the topmost shared
+  // item of each subtree (the one whose parent isn't itself shared).
+  // Descendants stay reachable via the per-folder "items inside" check,
+  // which surfaces any with their own non-inherited links.
+  sharedMap = scan.items;
+  const childIndex = {};
+  for (const it of Object.values(sharedMap)) {
+    if (it.parentId && sharedMap[it.parentId]) (childIndex[it.parentId] = childIndex[it.parentId] || []).push(it.itemId);
+  }
+  const entries = Object.values(sharedMap).filter((x) => !(x.parentId && sharedMap[x.parentId]));
+  for (const e of entries) {
+    if (!childIndex[e.itemId]) continue;
+    const ids = [];
+    const stack = [...childIndex[e.itemId]];
+    while (stack.length) {
+      const id = stack.pop();
+      ids.push(id);
+      if (childIndex[id]) stack.push(...childIndex[id]);
+    }
+    ids.sort((a, b) => String(sharedMap[b].modified || "").localeCompare(String(sharedMap[a].modified || "")));
+    e.hiddenIds = ids;
+  }
   const seen = new Set(entries.map((x) => x.driveId + "|" + x.itemId));
   for (const r of loadRegistry()) {
     if (!seen.has(r.driveId + "|" + r.itemId)) entries.push({ ...r, fromRegistry: true });
@@ -1170,7 +1237,32 @@ function redrawShared() {
   }
 }
 
-function sharedBlock(entry) {
+// Check a collapsed folder's descendants for permissions of their own
+// (anything non-inherited would otherwise be invisible in the Shared tab).
+async function checkDescendants(entry, note) {
+  const ids = entry.hiddenIds.slice(0, DESC_CAP);
+  let done = 0;
+  note.textContent = "Checking 0/" + ids.length + "…";
+  const found = [];
+  await mapLimit(ids, 6, async (id) => {
+    const child = sharedMap[id];
+    if (child) {
+      try {
+        const perms = prunablePerms(await graph.listPermissions(child.driveId, child.itemId))
+          .filter((p) => !p.inheritedFrom);
+        if (perms.length) found.push({ ...child, perms });
+      } catch (e) { /* unreadable child; skip */ }
+    }
+    done++;
+    note.textContent = "Checking " + done + "/" + ids.length + "…";
+  });
+  entry.subChecked = true;
+  entry.subFound = found;
+  entry.subSkipped = entry.hiddenIds.length - ids.length;
+  redrawShared();
+}
+
+function sharedBlock(entry, directOnly = false) {
   const wrap = document.createElement("div");
   wrap.className = "shared-item";
 
@@ -1189,7 +1281,7 @@ function sharedBlock(entry) {
       switchTab("files");
       openDetail(entry);
     } else if (entry.webUrl) {
-      window.open(entry.webUrl, "_blank", "noopener");
+      openExternal(entry.webUrl);
     }
   });
   const dt = document.createElement("span");
@@ -1208,7 +1300,9 @@ function sharedBlock(entry) {
 
   const refresh = async () => {
     try {
-      entry.perms = prunablePerms(await graph.listPermissions(entry.driveId, entry.itemId));
+      let perms = prunablePerms(await graph.listPermissions(entry.driveId, entry.itemId));
+      if (directOnly) perms = perms.filter((p) => !p.inheritedFrom);
+      entry.perms = perms;
     } catch (e) {
       entry.perms = [];
     }
@@ -1216,6 +1310,37 @@ function sharedBlock(entry) {
     redrawShared();
   };
   for (const p of entry.perms) wrap.appendChild(permCard(entry, p, refresh));
+
+  if (entry.hiddenIds && entry.hiddenIds.length && !entry.subChecked) {
+    const note = document.createElement("div");
+    note.className = "shared-note";
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "link-btn";
+    btn.textContent = "Check " + entry.hiddenIds.length + " item(s) inside for their own links";
+    btn.addEventListener("click", () => {
+      btn.remove();
+      checkDescendants(entry, note);
+    });
+    note.appendChild(btn);
+    wrap.appendChild(note);
+  } else if (entry.subChecked) {
+    const sub = document.createElement("div");
+    sub.className = "shared-sub";
+    const withPerms = (entry.subFound || []).filter((c) => c.perms && c.perms.length);
+    if (!withPerms.length) {
+      sub.innerHTML = `<div class="shared-note">No items inside have links of their own.</div>`;
+    } else {
+      for (const child of withPerms) sub.appendChild(sharedBlock(child, true));
+    }
+    if (entry.subSkipped > 0) {
+      const skip = document.createElement("div");
+      skip.className = "shared-note";
+      skip.textContent = "Checked the " + DESC_CAP + " most recently modified items; " + entry.subSkipped + " more were skipped.";
+      sub.appendChild(skip);
+    }
+    wrap.appendChild(sub);
+  }
   return wrap;
 }
 
