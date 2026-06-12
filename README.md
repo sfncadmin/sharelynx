@@ -1,159 +1,134 @@
-# SFNC Share Links — Outlook Add-in
+# SFNC Share Links -- Outlook Add-in
 
-OneDrive/SharePoint sharing from inside Outlook, modeled on the ShareFile/Egnyte add-ins: create sharing links with expiration and audience controls, manage/revoke existing access, convert attachments to links, and get warned on send when large attachments could be links instead.
+OneDrive/SharePoint sharing from inside Outlook, modeled on the ShareFile/Egnyte add-ins: browse and share files, create links with expiration and audience controls, manage and revoke existing access, convert attachments to links, and get warned on send when large attachments could be links instead.
 
-Office.js web add-in — works in classic Outlook for Windows (M365, WebView2), new Outlook, and OWA. Pure static frontend calling Microsoft Graph directly; no backend.
+Office.js web add-in. Works in classic Outlook for Windows (M365, WebView2), new Outlook, and OWA. Pure static frontend calling Microsoft Graph directly; no backend, no stored data, no secrets. Deployable to any Microsoft 365 tenant.
 
 ## Features
 
-| Feature | Where |
+### File browsing (Files tab)
+- **Recent / OneDrive / SharePoint** sources with search (OneDrive)
+- **Explorer-style tree view**: compact rows with inline expand chevrons, file-type icons, and modified-date and size columns; full breadcrumb navigation
+- **Pinned shortcuts**: star any site, library, folder, or file to pin it to the top of the Files tab; pins roam with the user across devices (Outlook roaming settings)
+- **Home directory**: users can land directly in "their" site/library/folder when opening the SharePoint tab, driven by tenant policy (see below)
+
+### Sharing links
+- **Create link** on any file: audience (people in the organization / specific people / anyone), view or edit, expiration date, optional password
+- **Insert into the draft** or **copy to clipboard**; recipients prefilled from To/Cc for "specific people" links
+- **Existing access**: list current links and permissions on a file, copy or insert them, edit expiration, revoke
+
+### Attachments
+- **Convert attachments to links** (Attachments tab): uploads selected draft attachments to OneDrive, replaces them with sharing links created with the user's default link settings, and removes the attachments
+- **On-send Smart Alert** (OnMessageSend): warns when outgoing attachments exceed a configurable size threshold and offers the conversion instead
+
+### Settings
+- Per-user defaults: link audience, permission, expiration days, upload folder, on-send alert threshold (roam with the user)
+- **Admin section** (visible to members of the policy admin groups): live policy summary, direct link to edit the policy list in SharePoint, and the full supported key reference
+
+## Tenant policy and home directory (optional)
+
+Admins shape the add-in per tenant without code changes via a SharePoint list named `SFNC_ShareLinks_Policy` on the tenant's root site (two text columns: `Title` = key, `SettingValue` = value). Changes take effect at the next sign-in.
+
+| Key | Controls |
 |-|-|
-| Browse/search OneDrive, browse SharePoint sites, Recent files | Files tab |
-| Create link: audience (org / specific people / anyone), view/edit, expiration, password | Files tab → pick a file |
-| Insert link into the draft or copy to clipboard | Files tab |
-| View existing links & permissions, copy/insert, edit expiration, revoke | Files tab → pick a file → Existing access |
-| Convert draft attachments → OneDrive uploads + sharing links, removes the attachments | Attachments tab |
-| On-send Smart Alert when attachments exceed a size threshold | automatic (OnMessageSend) |
-| Defaults: audience, permission, expiration days, upload folder, alert threshold | Settings tab |
+| `allowAnonymousLinks` | allow/deny "Anyone with the link" |
+| `adminOnlyAnonymousLinks` | restrict "Anyone" links to policy admins |
+| `allowOrganizationLinks` | allow/deny org-wide links |
+| `allowSpecificPeopleLinks` | allow/deny specific-people links |
+| `defaultScope`, `defaultType`, `defaultExpDays` | tenant defaults for new links |
+| `adminGroupIds` | comma-separated group IDs or display names whose members see the admin section |
+| `homeAttribute` | Exchange custom attribute slot (1-15) holding each user's home path; default 10 |
+| `spHome:<group>` | home path for members of a group, e.g. `VSTH Files/Documents/PROJECTS` |
 
-## Tenant policy & home directory (optional)
+Policy is enforced at link creation time, not just hidden in the UI. If no policy list exists, all audiences are available and built-in defaults apply.
 
-Admins can shape the add-in per tenant without code changes (the full key list shows in the
-Settings tab for admins):
+**Home directory paths** are `Site Name/Library/Folder/...`. Per user: set the Exchange custom attribute, e.g. `Set-Mailbox jdoe -CustomAttribute10 "VSTH Files/Documents"`. Per group: add an `spHome:<group name or ID>` policy row. The user attribute wins over group rules, and users can always navigate back up to all sites.
 
-- **Policy list:** create a SharePoint list named `SFNC_ShareLinks_Policy` on the root site
-  (text columns: `Title` = key, `SettingValue` = value). Keys control which link audiences are
-  allowed (e.g. `allowAnonymousLinks` = `false`), defaults, and admin groups (`adminGroupIds`).
-- **Home directory:** land users directly in "their" document library when they open the
-  SharePoint tab. Per user: set an Exchange custom attribute (slot 10 by default; change with
-  the `homeAttribute` policy key) to a path like `VSTH Files/Documents/PROJECTS`, e.g.
-  `Set-Mailbox jdoe -CustomAttribute10 "VSTH Files/Documents"`. Per group: add a policy row
-  `spHome:<group name or ID>` with the same path format. The user attribute wins over group
-  rules, and users can always navigate back up to all sites.
-- **Pinned shortcuts:** users can pin sites, libraries, folders, and files (star icon on each
-  row); pins follow the user across devices via Outlook roaming settings.
+## Architecture
 
-## Hosting model
+- Pure static SPA: HTML/CSS/JS served from any static host (currently **GitHub Pages** at `https://sfncadmin.github.io/sfnc-share-links/`)
+- Auth via **MSAL.js** (vendored at `src/vendor/msal-browser.min.js`, no CDN or node_modules dependency at runtime) with Nested App Authentication (NAA) where the host supports it, popup fallback otherwise
+- All data access is direct delegated calls to **Microsoft Graph**; nothing is proxied or stored server-side
+- The Entra app registration is **multi-tenant** (work/school accounts from any organization; personal Microsoft accounts blocked)
+- Delegated scopes: `User.Read`, `Files.ReadWrite.All`, `Sites.Read.All`, `GroupMember.Read.All` (admin section), plus optional `SharePointTenantSettings.Read.All` to mirror the tenant's SharePoint sharing defaults when no policy list exists (skipped silently if not consented)
 
-The add-in is a pure static frontend. Two ways to host it:
+What's public in the repo: the add-in HTML/JS/CSS and `config.js` (the Entra **clientId**). These are not secrets -- this is a public-client SPA with no client secret. No customer data, keys, or tokens are committed.
 
-- **Production (recommended):** the `src/` files are served from **GitHub Pages** at
-  `https://sfncadmin.github.io/sfnc-share-links/`. Nothing runs on your PC. `manifest.xml`
-  points here and is **admin-deployed** via the M365 admin center (no sideloading, no role policy).
-- **Local dev:** `npm start` serves the same files over `https://localhost:3000`.
-  `manifest.local.xml` points here (distinct add-in Id + "(Local)" name so it can coexist
-  with the deployed one). Use this only when changing the code.
+## Publisher setup (one time)
 
-The MSAL library is vendored at `src/vendor/msal-browser.min.js` and `config.js` ships with the
-deploy, so the hosted site has no `node_modules` or external-CDN dependency. All in-page paths are
-relative, so it works at a domain root or a `/repo/` subpath unchanged.
-
-## Production deploy (GitHub Pages + admin deploy)
-
-Prereqs: an M365 work account that can create Entra app registrations and admin-deploy add-ins.
+Already done for the hosted instance; repeat only if standing up a fork under a different app/host.
 
 ```powershell
-cd C:\zGit\SFNC\AddIn
-
-# 1. Register/refresh the Entra app with BOTH localhost and production redirect URIs,
-#    and (re)write src\config.js. Already run once for localhost; re-run with -BaseUrl
-#    to add the Pages redirect URIs:
-.\setup\2026_06.10_Setup_EntraApp_v1.0.ps1 -BaseUrl https://sfncadmin.github.io/sfnc-share-links
+# Register/refresh the multi-tenant Entra app and write src\config.js
+.\setup\2026_06.10_Setup_EntraApp_v1.0.ps1 -MultiTenant -BaseUrl https://sfncadmin.github.io/sfnc-share-links
 ```
 
-2. Push this folder to the public repo `sfncadmin/sfnc-share-links` and enable GitHub Pages
-   (main branch, root). The site goes live at `https://sfncadmin.github.io/sfnc-share-links/`.
-3. **Admin-deploy the manifest:** [M365 admin center](https://admin.microsoft.com) → Settings →
-   **Integrated apps** → **Upload custom apps** → app type **Office Add-in** → **Upload manifest file**
-   → choose `manifest.xml` → assign to **Just me** (or a group) → **Deploy**. Propagation can take a
-   few hours the first time.
-4. Restart classic Outlook. The **Share Links** button appears on the Message ribbon (compose and read).
+Then push to the public repo and enable GitHub Pages (branch root). `manifest.xml` points at the Pages URL.
 
-> What's public in the repo: the add-in HTML/JS/CSS and `config.js` (the Entra **clientId** and
-> **tenantId**). These are **not secrets** — this is a public-client SPA with no client secret, and a
-> tenant ID is already publicly derivable from any email domain via Microsoft's OIDC discovery
-> endpoint. No customer data, keys, or tokens are committed.
+## Deploying to a customer tenant
 
-## Local development
+Prereq: a Global Admin (or Application + Exchange admin) in the customer tenant.
 
-```powershell
-npm install              # dev tooling only (validator, cert helper)
-npm run certs            # trust the localhost dev cert (one-time prompt)
-npm start                # serves https://localhost:3000
-```
+1. **Grant admin consent** for the app in the customer tenant. Open the admin-consent URL (the setup script prints it; the format is `https://login.microsoftonline.com/organizations/adminconsent?client_id=<clientId>`) signed in as the customer admin, and accept.
+2. **Admin-deploy the manifest**: [M365 admin center](https://admin.microsoft.com) > Settings > **Integrated apps** > **Upload custom apps** > app type **Office Add-in** > **Upload manifest file** > choose `manifest.xml` > assign to a pilot group or everyone > **Deploy**. First-time propagation can take a few hours.
+3. *(Optional)* Create the `SFNC_ShareLinks_Policy` list on the tenant's SharePoint root site and add policy rows (see table above). Set `adminGroupIds` so the right people get the admin section.
+4. *(Optional)* Set home directories: per-user Exchange custom attributes and/or `spHome:<group>` rows.
+5. Users restart Outlook; the **Share Links** button appears on the Message ribbon (compose and read). First use: open a draft > Share Links > Sign in (silent/SSO on NAA-capable hosts, MSAL popup otherwise).
 
-Sideload `manifest.local.xml` via <https://aka.ms/olksideload> → My add-ins → Custom Addins →
-Add from file, or just open <https://localhost:3000/src/taskpane/taskpane.html> in a browser to
-work on the UI (compose features disabled outside Outlook).
+Nothing is installed per machine and there is no per-tenant code or hosting; one hosted instance serves every tenant.
 
-### First run
+## Shipping a change
 
-Open a draft → **Share Links** → **Sign in**. With NAA-capable hosts sign-in is silent/SSO; otherwise
-an MSAL popup appears. First sign-in asks for consent (or pre-consent for the tenant with the
-admin-consent URL the setup script prints).
-
-## Shipping a change (the iteration loop)
-
-There are two hosting layers, and only one of them is slow:
+Two layers, only one of them slow:
 
 | Layer | Hosts | Update speed |
 |-|-|-|
-| GitHub Pages | the code (`src/**`) | ~1-2 min after `git push`, automatic |
-| M365 Integrated Apps | the manifest (buttons, permissions, URLs) | up to ~24h, **only when the manifest changes** |
+| GitHub Pages | the code (`src/**`) | ~1-2 min after push to `GitMain`, automatic |
+| M365 Integrated Apps | the manifest (buttons, permissions, URLs) | up to ~24h, only when `manifest.xml` changes, per tenant |
 
-So **code changes are fast** — Pages rebuilds on every push to `GitMain` on its own (no GitHub
-Action needed; there's no build step). The ~24h M365 propagation only recurs if you edit
-`manifest.xml` itself (new ribbon button, changed permissions, renamed, repointed URL) — rare.
+Code changes are just a push -- Pages rebuilds on its own (no build step). Manifest changes (new ribbon button, changed permissions, renamed, repointed URL) must be re-uploaded in each tenant's Integrated Apps and re-propagate; rare.
 
-```powershell
-npm run deploy           # validates manifest.xml, then git add/commit/push -> Pages auto-rebuilds
-# ...wait ~1-2 min, then in Outlook close & reopen the task pane to pull new code
-```
-
-**Gotcha — stale pane after a push.** Outlook's embedded browser (WebView2) caches the old JS, so
-the pane can show old code even though Pages updated. Fixes, easiest first:
+**Gotcha -- stale pane after a push.** Outlook's embedded browser (WebView2) caches the old JS, so the pane can show old code even though Pages updated. Fixes, easiest first:
 
 1. Close and reopen the task pane.
 2. Restart Outlook.
-3. Clear the Office web-add-in cache: delete the contents of
-   `%LOCALAPPDATA%\Microsoft\Office\16.0\Wef\` while Outlook is closed.
+3. Clear the Office web-add-in cache: delete the contents of `%LOCALAPPDATA%\Microsoft\Office\16.0\Wef\` while Outlook is closed.
 
-This is a local cache, not a deploy delay — seconds, not hours. Don't mistake one for the other.
+This is a local cache, not a deploy delay -- seconds, not hours.
 
 ## Known platform limits (tenant/Graph, not bugs)
 
-- **"Anyone" links** fail if anonymous sharing is disabled in the SharePoint admin center — Graph returns the policy error and the pane surfaces it.
+- **"Anyone" links** fail if anonymous sharing is disabled in the SharePoint admin center -- Graph returns the policy error and the pane surfaces it.
 - **Expiration** is generally only honored on "Anyone" links (SharePoint Online policy). Setting it on org links may be rejected.
-- **Password-protected links** are OneDrive Personal only in Graph v1.0 — expect a clear error on business tenants.
-- **Block download** isn't exposed in Graph v1.0 `createLink` — roadmap (beta API / SharePoint REST).
+- **Password-protected links** are OneDrive Personal only in Graph v1.0 -- expect a clear error on business tenants.
+- **Block download** isn't exposed in Graph v1.0 `createLink` -- roadmap (beta API / SharePoint REST).
 - The on-send alert threshold is read via roamingSettings; changes apply after Outlook reloads the add-in.
 
 ## Project layout
 
 ```
-manifest.xml                     Production manifest (GitHub Pages URLs) — admin-deployed
-manifest.local.xml               Local-dev manifest (localhost URLs, distinct Id) — sideloaded
-server.js                        Dev static server (HTTPS via office-addin-dev-certs; --http for UI preview)
+manifest.xml                     Production manifest (GitHub Pages URLs) -- admin-deployed per tenant
 setup/                           Entra app registration + icon generation scripts
-src/config.js                    clientId/tenantId (committed; non-secret) — see config.example.js
+src/config.js                    clientId + scopes (committed; non-secret) -- see config.example.js
 src/vendor/msal-browser.min.js   Vendored MSAL (no node_modules/CDN dependency at runtime)
 src/taskpane/                    Taskpane UI (taskpane.html/css/js, auth.js = MSAL/NAA, graph.js = Graph calls)
 src/launchevent/launchevent.js   OnMessageSend Smart Alert handler (ES5, classic-Outlook JS runtime)
 src/commands/commands.html       Event runtime page for new Outlook / OWA
 src/assets/                      Icons (generated by setup script)
 .nojekyll                        Tells GitHub Pages to serve files as-is
+manifest.local.xml, server.js    Local-dev leftovers (localhost hosting); not used in production
 ```
 
-## Validate / troubleshoot
+## Troubleshooting
 
-```powershell
-npm run validate                 # validates manifest.xml against Microsoft's service
-```
+- **Sign-in errors**: confirm admin consent was granted in the user's tenant and the redirect URIs on the app registration include the hosting URL.
+- **Policy not applying**: the list must be named `SFNC_ShareLinks_Policy` on the tenant root site with `Title`/`SettingValue` text columns; policy loads at sign-in.
+- **Smart Alert not firing**: classic Outlook needs an M365 subscription build with event-based activation (Version 2206+); check that the add-in loaded (button visible) and the threshold isn't 0.
+- **Add-in button missing**: Integrated Apps propagation can take hours on first deploy; confirm the user is in the assigned group, then restart Outlook.
 
-- Taskpane blank → is `npm start` running? Visit <https://localhost:3000/src/taskpane/taskpane.html> in a browser (the UI runs standalone for testing; compose features disabled).
-- Sign-in errors → confirm `src/config.js` exists and consent was granted; check the redirect URIs on the app registration match port 3000.
-- Smart Alert not firing → classic Outlook needs an M365 subscription build with event-based activation (Version 2206+); check that the add-in loaded (button visible) and threshold isn't 0.
+## Roadmap
 
-## Roadmap (v2 candidates)
-
-- Block-download links, real hosting (GitHub Pages/Azure SWA) + multi-tenant app for client rollout via M365 Integrated Apps, centralized deployment, dark mode, drag-drop upload in the pane, "auto-convert on send" instead of warn.
+- Block-download links (Graph beta / SharePoint REST)
+- Drag-drop upload in the pane
+- "Auto-convert on send" instead of warn
+- Dark mode
