@@ -39,6 +39,14 @@ function toast(msg, isError = false) {
   toastTimer = setTimeout(() => { el.hidden = true; }, isError ? 9000 : 4000);
 }
 
+// Open a URL in the system browser; window.open is unreliable in some Office webviews.
+function openExternal(url) {
+  if (inOutlook && Office.context.ui && Office.context.ui.openBrowserWindow) {
+    try { Office.context.ui.openBrowserWindow(url); return; } catch (e) { /* fall through */ }
+  }
+  window.open(url, "_blank", "noopener");
+}
+
 async function copyText(text) {
   try {
     await navigator.clipboard.writeText(text);
@@ -898,6 +906,24 @@ function renderPermissions(perms) {
   for (const p of perms) list.appendChild(permCard(state.file, p, loadPermissions));
 }
 
+// Open an item's containing folder in OneDrive/SharePoint on the web
+// (folders open themselves). Local Explorer isn't reachable from the
+// sandboxed pane, so the web view is the best we can do.
+async function openInFolder(file) {
+  try {
+    const it = await graph.getItem(file.driveId, file.itemId);
+    let url = it.folder ? it.webUrl : null;
+    if (!url && it.parentReference && it.parentReference.id) {
+      const parent = await graph.getItem(file.driveId, it.parentReference.id);
+      url = parent.webUrl;
+    }
+    if (url) openExternal(url);
+    else toast("Couldn't resolve this item's folder.", true);
+  } catch (e) {
+    toast("Couldn't open folder: " + e.message, true);
+  }
+}
+
 // One permission/link card with copy/insert/expiration/remove actions.
 // Used by both the file detail view and the Shared tab; refresh is called
 // after any change (revoke, expiration update).
@@ -969,6 +995,7 @@ function permCard(file, p, refresh) {
     });
     actions.appendChild(expBtn);
 
+    actions.appendChild(folderBtn());
     actions.appendChild(removeBtn(p));
   } else {
     const who =
@@ -979,9 +1006,20 @@ function permCard(file, p, refresh) {
       `<div class="who">👤 ${esc(who)}</div>` +
       `<div class="sub">${esc((p.roles || []).join(", "))}${p.inheritedFrom ? " · inherited" : ""}</div>` +
       `<div class="actions"></div>`;
-    if (!isOwner && !p.inheritedFrom) card.querySelector(".actions").appendChild(removeBtn(p));
+    const actions = card.querySelector(".actions");
+    actions.appendChild(folderBtn());
+    if (!isOwner && !p.inheritedFrom) actions.appendChild(removeBtn(p));
   }
   return card;
+
+  function folderBtn() {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "link-btn";
+    btn.textContent = "Open folder";
+    btn.addEventListener("click", () => openInFolder(file));
+    return btn;
+  }
 
   function removeBtn(p) {
     // window.confirm is unreliable inside Office webviews; use two-click confirm
@@ -1042,12 +1080,17 @@ function resetSharedState() {
   if (list) list.innerHTML = "";
 }
 
+const SHARED_CACHE_V = 2; // v2: entries carry parentId for folder collapsing
+
 function loadSharedCache() {
-  try { return JSON.parse(localStorage.getItem(acctKey("sfnc_shared_delta"))) || null; } catch (e) { return null; }
+  try {
+    const c = JSON.parse(localStorage.getItem(acctKey("sfnc_shared_delta")));
+    return c && c.v === SHARED_CACHE_V ? c : null;
+  } catch (e) { return null; }
 }
 
 function saveSharedCache(c) {
-  try { localStorage.setItem(acctKey("sfnc_shared_delta"), JSON.stringify(c)); } catch (e) { /* cache only */ }
+  try { localStorage.setItem(acctKey("sfnc_shared_delta"), JSON.stringify({ ...c, v: SHARED_CACHE_V })); } catch (e) { /* cache only */ }
 }
 
 // Registry of items shared through the add-in outside the user's own OneDrive
@@ -1115,7 +1158,10 @@ async function loadShared(force) {
   }
   saveSharedCache(scan);
 
-  const entries = Object.values(scan.items);
+  // Collapse inherited shares: when a whole folder is shared, every item
+  // inside it carries the shared facet too. Show only the topmost shared
+  // item of each subtree (the one whose parent isn't itself shared).
+  const entries = Object.values(scan.items).filter((x) => !(x.parentId && scan.items[x.parentId]));
   const seen = new Set(entries.map((x) => x.driveId + "|" + x.itemId));
   for (const r of loadRegistry()) {
     if (!seen.has(r.driveId + "|" + r.itemId)) entries.push({ ...r, fromRegistry: true });
@@ -1189,7 +1235,7 @@ function sharedBlock(entry) {
       switchTab("files");
       openDetail(entry);
     } else if (entry.webUrl) {
-      window.open(entry.webUrl, "_blank", "noopener");
+      openExternal(entry.webUrl);
     }
   });
   const dt = document.createElement("span");

@@ -212,6 +212,7 @@ export async function scanSharedItems(prev, onProgress) {
         size: raw.size || 0,
         itemId: raw.id,
         driveId: raw.parentReference && raw.parentReference.driveId,
+        parentId: raw.parentReference && raw.parentReference.id,
         webUrl: raw.webUrl,
         modified: raw.lastModifiedDateTime
       };
@@ -288,6 +289,11 @@ export async function getHomeAttribute(attrNum) {
   } catch (e) {
     return null;
   }
+}
+
+export async function getItem(driveId, itemId) {
+  const { data } = await call("/drives/" + driveId + "/items/" + itemId + "?$select=id,name,webUrl,parentReference,folder");
+  return data;
 }
 
 export async function itemByPath(driveId, path) {
