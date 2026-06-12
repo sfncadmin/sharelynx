@@ -77,7 +77,10 @@ Prereq: a Global Admin (or Application + Exchange admin) in the customer tenant.
 
 1. **Grant admin consent** for the app in the customer tenant. Open the admin-consent URL (the setup script prints it; the format is `https://login.microsoftonline.com/organizations/adminconsent?client_id=<clientId>`) signed in as the customer admin, and accept.
 2. **Admin-deploy the manifest**: [M365 admin center](https://admin.microsoft.com) > Settings > **Integrated apps** > **Upload custom apps** > app type **Office Add-in** > **Upload manifest file** > choose `manifest.xml` > assign to a pilot group or everyone > **Deploy**. First-time propagation can take a few hours.
-3. *(Optional)* Create the `SFNC_ShareLinks_Policy` list on the tenant's SharePoint root site and add policy rows (see table above). Set `adminGroupIds` so the right people get the admin section.
+3. *(Optional)* Create the `SFNC_ShareLinks_Policy` list on the tenant's SharePoint root site and add policy rows (see table above). Set `adminGroupIds` so the right people get the admin section. The setup script does this in one step:
+   ```powershell
+   .\setup\2026_06.12_Setup_PolicyList_v1.0.ps1 -AdminGroupIds "IT Team" -Settings @{ defaultExpDays = "30" }
+   ```
 4. *(Optional)* Set home directories: per-user Exchange custom attributes and/or `spHome:<group>` rows.
 5. Users restart Outlook; the **Share Links** button appears on the Message ribbon (compose and read). First use: open a draft > Share Links > Sign in (silent/SSO on NAA-capable hosts, MSAL popup otherwise).
 
