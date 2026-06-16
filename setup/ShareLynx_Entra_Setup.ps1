@@ -18,13 +18,13 @@
 
 .EXAMPLE
     .\ShareLynx_Entra_Setup.ps1
-    .\ShareLynx_Entra_Setup.ps1 -MultiTenant -BaseUrl https://sfncadmin.github.io/sfnc-share-links
+    .\ShareLynx_Entra_Setup.ps1 -MultiTenant -BaseUrl https://sfncadmin.github.io/sharelynx
 #>
 [CmdletBinding()]
 param(
     [string]$DisplayName = "ShareLynx (Outlook Add-in)",
     [int]$Port = 3000,
-    # Production hosting origin+path, e.g. https://sfncadmin.github.io/sfnc-share-links
+    # Production hosting origin+path, e.g. https://sfncadmin.github.io/sharelynx
     [string]$BaseUrl = "",
     # Allow any Microsoft 365 tenant to sign in (omit tenantId from config.js)
     [switch]$MultiTenant
