@@ -2,7 +2,7 @@
 // Auth via MSAL: Nested App Authentication (NAA) when the Outlook host supports
 // brokering, falling back to a standard MSAL popup flow otherwise.
 
-const CFG = window.SFNC_CONFIG || {};
+const CFG = window.SHARELYNX_CONFIG || {};
 const SCOPES = CFG.scopes || ["User.Read", "Files.ReadWrite.All", "Sites.Read.All"];
 
 let pca = null;
@@ -17,7 +17,7 @@ export function getAccount() {
 
 export async function initAuth() {
   if (!isConfigured()) {
-    throw new Error("src/config.js is missing or has placeholder values. Run setup\\2026_06.10_Setup_EntraApp_v1.0.ps1 first.");
+    throw new Error("src/config.js is missing or has placeholder values. Run setup\\ShareLynx_Entra_Setup.ps1 first.");
   }
   const config = {
     auth: {

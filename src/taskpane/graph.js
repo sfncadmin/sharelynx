@@ -235,13 +235,13 @@ export async function getUserGroups() {
 }
 
 export async function getSharePointPolicy() {
-  const CFG = window.SFNC_CONFIG || {};
+  const CFG = window.SHARELYNX_CONFIG || {};
   const siteId = CFG.adminPolicySite || "root";
   try {
     const { data: listsData } = await call(
       "/sites/" + siteId + "/lists?$select=id,displayName,webUrl&$top=200"
     );
-    const list = (listsData.value || []).find((l) => l.displayName === "SFNC_ShareLinks_Policy");
+    const list = (listsData.value || []).find((l) => l.displayName === "ShareLynx_Policy");
     if (!list) return null;
     const { data: itemsData } = await call(
       "/sites/" + siteId + "/lists/" + list.id +

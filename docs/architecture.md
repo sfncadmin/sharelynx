@@ -1,0 +1,89 @@
+# Architecture
+
+How ShareLynx is built and why it's built that way.
+
+---
+
+## Design principles
+
+- **No backend.** The add-in is a pure static SPA -- HTML, CSS, and vanilla JavaScript. No server-side code, no database, no stored data. Everything is served from GitHub Pages.
+- **No build step.** No bundler, no transpiler, no framework. Push to `GitMain` and GitHub Pages serves the files as-is. The `.nojekyll` file tells Pages not to process them.
+- **No runtime dependencies.** MSAL.js is vendored at `src/vendor/msal-browser.min.js` -- no CDN fetch, no `node_modules` at runtime. The only external calls are to Microsoft Graph and the MSAL authority endpoints.
+- **Direct Graph access.** All data flows between the user's browser and Microsoft Graph using delegated permissions. Nothing is proxied, cached, or logged server-side.
+
+---
+
+## Authentication
+
+Auth is handled by MSAL.js with two paths:
+
+1. **Nested App Authentication (NAA)** -- used when the Outlook host supports brokering (new Outlook, OWA). The add-in creates a nestable public client and the host brokers the token silently.
+2. **Popup fallback** -- used in classic Outlook for Windows or when NAA isn't available. Standard MSAL popup flow with `select_account` prompt.
+
+Token caching uses `localStorage`. The active account is tracked in the MSAL instance so silent renewal works across tab/pane reopens.
+
+### Scopes
+
+| Scope | Used for |
+|-|-|
+| `User.Read` | Sign-in identity, account display name |
+| `Files.ReadWrite.All` | Browse, upload, create links, manage permissions |
+| `Sites.Read.All` | SharePoint site/library browsing, policy list read |
+| `GroupMember.Read.All` | Admin section (requires admin consent) |
+| `SharePointTenantSettings.Read.All` | Mirror SP admin sharing defaults when no policy list exists (optional, skipped silently if not consented) |
+
+### Multi-tenant
+
+The Entra app registration uses `AzureADMultipleOrgs` sign-in audience -- work/school accounts from any organization. Personal Microsoft accounts are blocked. Each tenant's admin grants consent independently; no tenant data crosses boundaries.
+
+---
+
+## Security model
+
+- **No client secret.** This is a public-client SPA. The `clientId` in `config.js` is not a secret -- it identifies the app but cannot authenticate without a user's interactive sign-in.
+- **No stored data.** The add-in stores user preferences (settings, pins, cached delta tokens) in `localStorage` and Outlook roaming settings. No user content, files, or tokens are written to the server or repo.
+- **Policy enforcement at creation time.** Tenant policy (which link types are allowed, expiration requirements) is enforced when the sharing link is created, not just hidden in the UI. If an admin disallows anonymous links, the API call to create one will fail and the error is surfaced.
+- **Delegated permissions only.** Every Graph call runs as the signed-in user with their permissions. The add-in cannot access anything the user couldn't access themselves.
+
+---
+
+## Project layout
+
+```
+manifest.xml                       Production manifest (GitHub Pages URLs)
+docs/                              Documentation
+setup/
+  ShareLynx_Entra_Setup.ps1     Entra app registration + config.js generation
+  2026_06.10_Generate_Icons_v1.0.ps1     Icon generation
+  ShareLynx_Policy_Setup.ps1   SharePoint policy list creation + seeding
+src/
+  config.js                        clientId + scopes (committed; not a secret)
+  config.example.js                Template showing the config shape
+  auth-redirect.html               MSAL redirect target
+  vendor/msal-browser.min.js       Vendored MSAL (no CDN/npm dependency)
+  assets/                          Icons (16-128px)
+  taskpane/
+    taskpane.html                  Main UI
+    taskpane.css                   Styles
+    taskpane.js                    App logic, state, UI rendering
+    auth.js                        MSAL/NAA authentication
+    graph.js                       Microsoft Graph API layer
+  launchevent/
+    launchevent.js                 OnMessageSend Smart Alert (ES5, classic Outlook JS runtime)
+  commands/
+    commands.html                  Event runtime page for new Outlook / OWA
+.nojekyll                          Tells GitHub Pages to serve files as-is
+```
+
+---
+
+## Data flow
+
+1. User opens the add-in pane in Outlook
+2. MSAL authenticates (NAA or popup) and caches an access token in `localStorage`
+3. User browses files -- `graph.js` calls `/me/drive/...` or `/sites/...` endpoints
+4. User creates a sharing link -- `graph.js` calls `createLink` on the drive item
+5. Link is inserted into the email body via `Office.context.mailbox.item.body.setAsync` or copied to clipboard
+6. On-send handler (`launchevent.js`) reads attachment sizes via `getAttachmentsAsync` and compares against the threshold stored in Outlook roaming settings
+
+All state lives in `localStorage` (preferences, pins, delta cache) and Outlook roaming settings (threshold, pins, shared-item registry). Nothing persists server-side.

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>SFNC Share Links</title>
+  <title>ShareLynx</title>
   <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
   <script src="../vendor/msal-browser.min.js"></script>
   <script src="../config.js"></script>
@@ -169,9 +169,9 @@
         <h3>Policy <span class="badge">Admin</span></h3>
         <div id="policy-summary" class="policy-summary"></div>
         <a id="policy-list-link" class="link-btn" target="_blank" rel="noopener noreferrer" hidden>Edit policy in SharePoint →</a>
-        <p class="hint">Manage the <code>SFNC_ShareLinks_Policy</code> list on your SharePoint root site. Create the list with two text columns: <strong>Title</strong> (setting key) and <strong>SettingValue</strong>. Changes take effect after the next sign-in.</p>
-        <p class="hint">Supported keys: <code>allowAnonymousLinks</code>, <code>adminOnlyAnonymousLinks</code>, <code>allowOrganizationLinks</code>, <code>allowSpecificPeopleLinks</code>, <code>defaultScope</code>, <code>defaultType</code>, <code>defaultExpDays</code>, <code>adminGroupIds</code> (comma-separated group IDs or display names), <code>homeAttribute</code> (Exchange custom attribute slot 1&ndash;15 holding each user's home path; default 10), <code>spHome:&lt;group&gt;</code> (home path for a group, e.g. <code>VSTH Files/Documents/PROJECTS</code>).</p>
-        <p class="hint">Home paths: per-user attribute wins over group rules. Set per user with e.g. <code>Set-Mailbox user -CustomAttribute10 "VSTH Files/Documents"</code>. Members land there when opening the SharePoint tab and can navigate back up to all sites.</p>
+        <p class="hint">Manage the <code>ShareLynx_Policy</code> list on your SharePoint root site. Create the list with two text columns: <strong>Title</strong> (setting key) and <strong>SettingValue</strong>. Changes take effect after the next sign-in.</p>
+        <p class="hint">Supported keys: <code>allowAnonymousLinks</code>, <code>adminOnlyAnonymousLinks</code>, <code>allowOrganizationLinks</code>, <code>allowSpecificPeopleLinks</code>, <code>defaultScope</code>, <code>defaultType</code>, <code>defaultExpDays</code>, <code>adminGroupIds</code> (comma-separated group IDs or display names), <code>homeAttribute</code> (Exchange custom attribute slot 1&ndash;15 holding each user's home path; default 10), <code>spHome:&lt;group&gt;</code> (home path for a group, e.g. <code>Contoso Files/Documents/PROJECTS</code>).</p>
+        <p class="hint">Home paths: per-user attribute wins over group rules. Set per user with e.g. <code>Set-Mailbox user -CustomAttribute10 "Contoso Files/Documents"</code>. Members land there when opening the SharePoint tab and can navigate back up to all sites.</p>
       </div>
     </section>
   </main>

@@ -6,9 +6,9 @@
   xsi:type="MailApp">
   <Id>d423aaf6-6763-44b0-970d-ba84a3f607e0</Id>
   <Version>1.0.0.0</Version>
-  <ProviderName>SFNC</ProviderName>
+  <ProviderName>ShareLynx</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
-  <DisplayName DefaultValue="SFNC Share Links"/>
+  <DisplayName DefaultValue="ShareLynx"/>
   <Description DefaultValue="Create OneDrive and SharePoint sharing links with expiration and access management, and convert attachments to links, without leaving Outlook."/>
   <IconUrl DefaultValue="https://sfncadmin.github.io/sfnc-share-links/src/assets/icon-64.png"/>
   <HighResolutionIconUrl DefaultValue="https://sfncadmin.github.io/sfnc-share-links/src/assets/icon-128.png"/>
@@ -126,9 +126,9 @@
           <bt:Url id="Taskpane.Url" DefaultValue="https://sfncadmin.github.io/sfnc-share-links/src/taskpane/taskpane.html"/>
         </bt:Urls>
         <bt:ShortStrings>
-          <bt:String id="GroupLabel" DefaultValue="SFNC Share Links"/>
+          <bt:String id="GroupLabel" DefaultValue="ShareLynx"/>
           <bt:String id="TaskpaneButton.Label" DefaultValue="Share Links"/>
-          <bt:String id="TaskpaneButton.Title" DefaultValue="SFNC Share Links"/>
+          <bt:String id="TaskpaneButton.Title" DefaultValue="ShareLynx"/>
         </bt:ShortStrings>
         <bt:LongStrings>
           <bt:String id="TaskpaneButton.Tooltip" DefaultValue="Create OneDrive/SharePoint sharing links, set expiration, manage access, and convert attachments to links."/>

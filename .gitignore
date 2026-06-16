@@ -1,6 +1,6 @@
 node_modules/
 package-lock.json
 
-# config.js holds the Entra clientId/tenantId. These are NOT secrets for a
-# public client SPA (no client secret exists; tenantId is derivable from the
-# email domain), so it IS committed here to ship with the GitHub Pages deploy.
+# config.js holds the Entra clientId/tenantId. These are not secrets for a
+# public-client SPA (no client secret exists), so it IS committed to ship
+# with the GitHub Pages deploy.

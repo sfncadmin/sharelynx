@@ -8,7 +8,7 @@ var DEFAULT_THRESHOLD_MB = 5;
 function getThresholdMB() {
   try {
     var rs = Office.context.roamingSettings;
-    var v = rs && rs.get("sfnc_thresholdMB");
+    var v = rs && rs.get("lynx_thresholdMB");
     if (typeof v === "number" && v >= 0) return v;
     if (typeof v === "string" && v !== "" && !isNaN(Number(v))) return Number(v);
   } catch (e) {
@@ -52,7 +52,7 @@ function onMessageSendHandler(event) {
           errorMessage:
             "This message has " + big.length + " attachment(s) over " + thresholdMB + " MB:\n" +
             big.join("\n") +
-            "\n\nOpen SFNC Share Links to upload them to OneDrive and send a link instead, or send anyway.",
+            "\n\nOpen ShareLynx to upload them to OneDrive and send a link instead, or send anyway.",
           cancelLabel: "Convert to links",
           commandId: "msgComposeOpenPaneButton"
         });

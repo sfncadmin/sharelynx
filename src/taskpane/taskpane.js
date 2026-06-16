@@ -102,17 +102,17 @@ const state = {
 
 function loadSettings() {
   try {
-    return { ...DEFAULT_SETTINGS, ...(JSON.parse(localStorage.getItem("sfnc_settings")) || {}) };
+    return { ...DEFAULT_SETTINGS, ...(JSON.parse(localStorage.getItem("lynx_settings")) || {}) };
   } catch (e) {
     return { ...DEFAULT_SETTINGS };
   }
 }
 
 function saveSettings() {
-  localStorage.setItem("sfnc_settings", JSON.stringify(settings));
+  localStorage.setItem("lynx_settings", JSON.stringify(settings));
   if (inOutlook && Office.context.roamingSettings) {
     try {
-      Office.context.roamingSettings.set("sfnc_thresholdMB", settings.thresholdMB);
+      Office.context.roamingSettings.set("lynx_thresholdMB", settings.thresholdMB);
       Office.context.roamingSettings.saveAsync(() => {});
     } catch (e) { /* read item may not allow saving; non-fatal */ }
   }
@@ -144,7 +144,7 @@ async function boot() {
     $("#view-signin").hidden = false;
     $("#btn-signin").hidden = true;
     $("#signin-blurb").textContent = "Setup required: src/config.js is missing or has placeholder values.";
-    showSigninError("Run setup\\2026_06.10_Setup_EntraApp_v1.0.ps1 from the AddIn folder, then reload this pane.");
+    showSigninError("Run setup\\ShareLynx_Entra_Setup.ps1 from the AddIn folder, then reload this pane.");
     return;
   }
   try {
@@ -297,7 +297,7 @@ async function loadTenantPolicy() {
     }
   }
 
-  if (!localStorage.getItem("sfnc_settings")) {
+  if (!localStorage.getItem("lynx_settings")) {
     if (policy.defaultScope) settings.scope = policy.defaultScope;
     if (policy.defaultType) settings.type = policy.defaultType;
     if (policy.defaultExpDays !== null) settings.expDays = policy.defaultExpDays;
@@ -433,22 +433,22 @@ async function resolveHomeCrumbs(path) {
 function loadPins() {
   try {
     if (inOutlook && Office.context.roamingSettings) {
-      const v = Office.context.roamingSettings.get("sfnc_pins");
+      const v = Office.context.roamingSettings.get("lynx_pins");
       if (v) return JSON.parse(v);
     }
   } catch (e) { /* fall back to local */ }
   try {
-    return JSON.parse(localStorage.getItem("sfnc_pins")) || [];
+    return JSON.parse(localStorage.getItem("lynx_pins")) || [];
   } catch (e) {
     return [];
   }
 }
 
 function savePins() {
-  localStorage.setItem("sfnc_pins", JSON.stringify(pins));
+  localStorage.setItem("lynx_pins", JSON.stringify(pins));
   if (inOutlook && Office.context.roamingSettings) {
     try {
-      Office.context.roamingSettings.set("sfnc_pins", JSON.stringify(pins));
+      Office.context.roamingSettings.set("lynx_pins", JSON.stringify(pins));
       Office.context.roamingSettings.saveAsync(() => {});
     } catch (e) { /* non-fatal */ }
   }
@@ -1087,13 +1087,13 @@ const SHARED_CACHE_V = 2; // v2: entries carry parentId for folder collapsing
 
 function loadSharedCache() {
   try {
-    const c = JSON.parse(localStorage.getItem(acctKey("sfnc_shared_delta")));
+    const c = JSON.parse(localStorage.getItem(acctKey("lynx_shared_delta")));
     return c && c.v === SHARED_CACHE_V ? c : null;
   } catch (e) { return null; }
 }
 
 function saveSharedCache(c) {
-  try { localStorage.setItem(acctKey("sfnc_shared_delta"), JSON.stringify({ ...c, v: SHARED_CACHE_V })); } catch (e) { /* cache only */ }
+  try { localStorage.setItem(acctKey("lynx_shared_delta"), JSON.stringify({ ...c, v: SHARED_CACHE_V })); } catch (e) { /* cache only */ }
 }
 
 // Registry of items shared through the add-in outside the user's own OneDrive
@@ -1101,18 +1101,18 @@ function saveSharedCache(c) {
 function loadRegistry() {
   try {
     if (inOutlook && Office.context.roamingSettings) {
-      const v = Office.context.roamingSettings.get("sfnc_shared_reg");
+      const v = Office.context.roamingSettings.get("lynx_shared_reg");
       if (v) return JSON.parse(v);
     }
   } catch (e) { /* fall back to local */ }
-  try { return JSON.parse(localStorage.getItem(acctKey("sfnc_shared_reg"))) || []; } catch (e) { return []; }
+  try { return JSON.parse(localStorage.getItem(acctKey("lynx_shared_reg"))) || []; } catch (e) { return []; }
 }
 
 function saveRegistry(reg) {
-  localStorage.setItem(acctKey("sfnc_shared_reg"), JSON.stringify(reg));
+  localStorage.setItem(acctKey("lynx_shared_reg"), JSON.stringify(reg));
   if (inOutlook && Office.context.roamingSettings) {
     try {
-      Office.context.roamingSettings.set("sfnc_shared_reg", JSON.stringify(reg));
+      Office.context.roamingSettings.set("lynx_shared_reg", JSON.stringify(reg));
       Office.context.roamingSettings.saveAsync(() => {});
     } catch (e) { /* non-fatal */ }
   }

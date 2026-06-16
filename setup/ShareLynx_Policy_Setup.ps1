@@ -1,10 +1,10 @@
 <#
 .SYNOPSIS
-    Creates the SFNC_ShareLinks_Policy SharePoint list that the Share Links
+    Creates the ShareLynx_Policy SharePoint list that the ShareLynx
     add-in reads for tenant policy, and optionally seeds it with settings.
 
 .DESCRIPTION
-    Creates a list named SFNC_ShareLinks_Policy on the tenant root site
+    Creates a list named ShareLynx_Policy on the tenant root site
     (or the site passed via -SiteId) with a SettingValue text column, which
     is the layout the add-in expects (Title = key, SettingValue = value).
 
@@ -16,13 +16,13 @@
     stored. Users pick up policy changes at their next sign-in to the add-in.
 
 .EXAMPLE
-    .\2026_06.12_Setup_PolicyList_v1.0.ps1 -AdminGroupIds "IT Team"
+    .\ShareLynx_Policy_Setup.ps1 -AdminGroupIds "IT Team"
 
 .EXAMPLE
-    .\2026_06.12_Setup_PolicyList_v1.0.ps1 -AdminGroupIds "IT Team" -Settings @{
+    .\ShareLynx_Policy_Setup.ps1 -AdminGroupIds "IT Team" -Settings @{
         defaultExpDays      = "30"
         allowAnonymousLinks = "false"
-        "spHome:LKV Staff"  = "LKV Files/Documents"
+        "spHome:Sales Team"  = "Contoso Files/Documents"
     }
 #>
 [CmdletBinding()]
@@ -36,7 +36,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$ListName = "SFNC_ShareLinks_Policy"
+$ListName = "ShareLynx_Policy"
 
 if (-not (Get-Module -ListAvailable Microsoft.Graph.Authentication)) {
     Write-Host "Installing Microsoft.Graph.Authentication module (CurrentUser)..." -ForegroundColor Yellow
@@ -56,7 +56,7 @@ if ($list) {
 } else {
     $body = @{
         displayName = $ListName
-        description = "Tenant policy for the Share Links Outlook add-in. Title = setting key, SettingValue = value."
+        description = "Tenant policy for the ShareLynx Outlook add-in. Title = setting key, SettingValue = value."
         list        = @{ template = "genericList" }
         columns     = @(@{ name = "SettingValue"; text = @{} })
     } | ConvertTo-Json -Depth 5
