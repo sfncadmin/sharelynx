@@ -6,6 +6,17 @@ ShareLynx is an Outlook add-in that brings file sharing directly into the compos
 
 Works in classic Outlook for Windows, new Outlook, and Outlook on the web. Deploys to any Microsoft 365 tenant with zero per-machine installs.
 
+<p align="center">
+  <img src="docs/images/files-tab.png" alt="SharePoint file browser" width="230" />
+  &nbsp;&nbsp;
+  <img src="docs/images/create-link.png" alt="Create sharing link" width="230" />
+  &nbsp;&nbsp;
+  <img src="docs/images/manage-links.png" alt="Manage shared links" width="230" />
+</p>
+<p align="center">
+  <em>Browse SharePoint sites &nbsp;|&nbsp; Create links with expiration controls &nbsp;|&nbsp; Review and prune shared links</em>
+</p>
+
 ---
 
 ## What it does
