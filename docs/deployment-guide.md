@@ -86,6 +86,14 @@ Two layers, only one of them slow:
 
 Code changes are just a push -- Pages rebuilds on its own (no build step). Manifest changes (new ribbon button, changed permissions, repointed URL) must be re-uploaded in each tenant's Integrated Apps and re-propagate. This is rare.
 
+### Bump the version on every manifest redeploy
+
+Before re-uploading a changed `manifest.xml`, increment the `<Version>` element (e.g. `1.1.0.0` -> `1.2.0.0`). The `<Id>` GUID stays the same so M365 recognizes it as the same add-in; the version is how it detects a newer build to replace. Re-uploading at the same version is rejected with:
+
+> Failed. Please update the version number in the manifest file and try again.
+
+Commit and push after bumping so the hosted copy at the Pages URL matches the file you upload. Pure `src/**` code changes do not need a bump -- Pages serves those live.
+
 ### Stale pane after a push
 
 Outlook's embedded browser (WebView2) caches old JS, so the pane can show old code even though Pages updated. Fixes, easiest first:
