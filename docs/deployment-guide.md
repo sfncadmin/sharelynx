@@ -6,24 +6,25 @@ How to set up, deploy, update, and troubleshoot ShareLynx.
 
 ## Publisher setup (one time)
 
-This is already done for the hosted instance at GitHub Pages. Only repeat if standing up a fork under a different Entra app or host.
-
-### 1. Register the Entra app
+### 1. Register the Entra app and generate the manifest
 
 ```powershell
-.\setup\ShareLynx_Entra_Setup.ps1 -MultiTenant -BaseUrl https://your-host/your-repo
+.\setup\ShareLynx_Entra_Setup.ps1 -MultiTenant -BaseUrl https://yourorg.github.io/sharelynx
 ```
+
+If you omit `-BaseUrl`, the script prompts for it. Use whichever HTTPS URL will serve the repo files -- GitHub Pages, Azure Static Web Apps, or any static host.
 
 The script:
 - Creates (or updates) a public-client SPA app registration with delegated Graph permissions
+- Generates `manifest.xml` from `manifest.template.xml`, stamped with your hosting URL
 - Writes `src/config.js` with the resulting `clientId` and scopes
 - Prints an admin-consent URL for `GroupMember.Read.All` (needed for the policy/admin feature)
 
 Pass `-MultiTenant` to allow any Microsoft 365 organization to sign in. Without it, the app is single-tenant (your org only).
 
-### 2. Enable GitHub Pages
+### 2. Host the files
 
-Push to the repo, then enable Pages (Settings > Pages > branch root). `manifest.xml` references the Pages URL for all source locations.
+Push to a public repo and enable GitHub Pages (Settings > Pages > branch root), or deploy the files to your static host of choice. The generated `manifest.xml` already points at your URL.
 
 ---
 
@@ -71,7 +72,7 @@ This creates (or updates) the `ShareLynx_Policy` SharePoint list on the tenant r
 
 Restart Outlook. The **ShareLynx** button appears on the Message ribbon (compose and read). First use: open a draft > ShareLynx > sign in.
 
-Nothing is installed per machine. There is no per-tenant code or hosting -- one hosted instance serves every tenant.
+Nothing is installed per machine. There is no per-tenant code -- one hosted instance serves every tenant.
 
 ---
 
@@ -81,10 +82,10 @@ Two layers, only one of them slow:
 
 | Layer | What it hosts | Update speed |
 |-|-|-|
-| GitHub Pages | the code (`src/**`) | ~1--2 min after push, automatic |
+| Your static host | the code (`src/**`) | depends on host (GitHub Pages: ~1--2 min) |
 | M365 Integrated Apps | the manifest (buttons, permissions, URLs) | up to ~24h, only when `manifest.xml` changes |
 
-Code changes are just a push -- Pages rebuilds on its own (no build step). Manifest changes (new ribbon button, changed permissions, repointed URL) must be re-uploaded in each tenant's Integrated Apps and re-propagate. This is rare.
+Code changes are just a push -- no build step. Manifest changes (new ribbon button, changed permissions, repointed URL) must be re-uploaded in each tenant's Integrated Apps and re-propagate. This is rare.
 
 ### Bump the version on every manifest redeploy
 
@@ -92,7 +93,9 @@ Before re-uploading a changed `manifest.xml`, increment the `<Version>` element 
 
 > Failed. Please update the version number in the manifest file and try again.
 
-Commit and push after bumping so the hosted copy at the Pages URL matches the file you upload. Pure `src/**` code changes do not need a bump -- Pages serves those live.
+Commit and push after bumping so the hosted copy matches the file you upload. Pure `src/**` code changes do not need a bump -- your host serves those live.
+
+If you change your hosting URL, re-run the setup script with the new `-BaseUrl` to regenerate `manifest.xml`, then re-upload it.
 
 ### Stale pane after a push
 

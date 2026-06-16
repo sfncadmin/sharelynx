@@ -1,11 +1,14 @@
 <#
 .SYNOPSIS
     Creates (or updates) the Entra ID app registration for the ShareLynx
-    Outlook add-in and writes src\config.js with the resulting IDs.
+    Outlook add-in, generates manifest.xml, and writes src\config.js.
 
 .DESCRIPTION
     Registers a public client (SPA) app with delegated Graph permissions:
     User.Read, Files.ReadWrite.All, Sites.Read.All, GroupMember.Read.All.
+
+    Generates manifest.xml from manifest.template.xml, stamping in the
+    hosting URL you provide via -BaseUrl (or interactively when omitted).
 
     By default creates a single-tenant app (AzureADMyOrg). Pass -MultiTenant to
     create an app that accepts sign-ins from any Microsoft 365 organization.
@@ -17,20 +20,58 @@
     create app registrations (Application Developer role or higher).
 
 .EXAMPLE
-    .\ShareLynx_Entra_Setup.ps1
-    .\ShareLynx_Entra_Setup.ps1 -MultiTenant -BaseUrl https://sfncadmin.github.io/sharelynx
+    .\ShareLynx_Entra_Setup.ps1 -MultiTenant -BaseUrl https://yourorg.github.io/sharelynx
 #>
 [CmdletBinding()]
 param(
     [string]$DisplayName = "ShareLynx (Outlook Add-in)",
     [int]$Port = 3000,
-    # Production hosting origin+path, e.g. https://sfncadmin.github.io/sharelynx
+    # Production hosting URL (origin+path). Prompted if omitted.
     [string]$BaseUrl = "",
     # Allow any Microsoft 365 tenant to sign in (omit tenantId from config.js)
     [switch]$MultiTenant
 )
 
 $ErrorActionPreference = "Stop"
+$repoRoot = Split-Path $PSScriptRoot -Parent
+
+# --- Prompt for BaseUrl if not provided ---
+if (-not $BaseUrl) {
+    Write-Host ""
+    Write-Host "ShareLynx needs a hosting URL for its static files." -ForegroundColor Cyan
+    Write-Host "This is usually a GitHub Pages URL for your fork, e.g.:"
+    Write-Host "  https://yourorg.github.io/sharelynx" -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "Other options work too (Azure Static Web Apps, any HTTPS host)."
+    Write-Host ""
+    $BaseUrl = Read-Host "Enter your hosting URL"
+    if (-not $BaseUrl) {
+        Write-Error "A hosting URL is required. Pass -BaseUrl or enter one when prompted."
+        return
+    }
+}
+$BaseUrl = $BaseUrl.TrimEnd("/")
+
+# --- Generate manifest.xml from template ---
+$templatePath = Join-Path $repoRoot "manifest.template.xml"
+$manifestPath = Join-Path $repoRoot "manifest.xml"
+
+if (-not (Test-Path $templatePath)) {
+    Write-Error "manifest.template.xml not found at $templatePath"
+    return
+}
+
+$manifestContent = (Get-Content $templatePath -Raw) -replace '\{\{BASE_URL\}\}', $BaseUrl
+$manifestContent | Set-Content -Path $manifestPath -Encoding utf8 -NoNewline
+Write-Host "Generated manifest.xml with base URL: $BaseUrl" -ForegroundColor Green
+
+# Add hosting domain to AppDomains if not already present
+$hostingHost = ([Uri]$BaseUrl).GetLeftPart([UriPartial]::Authority)
+if ($manifestContent -notmatch [regex]::Escape($hostingHost)) {
+    $manifestContent = $manifestContent -replace '(  </AppDomains>)', "    <AppDomain>$hostingHost</AppDomain>`n  </AppDomains>"
+    $manifestContent | Set-Content -Path $manifestPath -Encoding utf8 -NoNewline
+    Write-Host "Added $hostingHost to AppDomains" -ForegroundColor Green
+}
 
 if (-not (Get-Module -ListAvailable Microsoft.Graph.Applications)) {
     Write-Host "Installing Microsoft.Graph.Applications module (CurrentUser)..." -ForegroundColor Yellow
@@ -53,19 +94,16 @@ $resourceAccess = foreach ($name in $scopeNames) {
     @{ Id = $scope.Id; Type = "Scope" }
 }
 
-$spaRedirects = [System.Collections.Generic.List[string]]@(
+$originHost = ([Uri]$BaseUrl).Host
+$spaRedirects = @(
     "https://localhost:$Port/src/auth-redirect.html",
     "https://localhost:$Port/src/taskpane/taskpane.html",
-    "brk-multihub://localhost:$Port"
+    "brk-multihub://localhost:$Port",
+    "$BaseUrl/src/auth-redirect.html",
+    "$BaseUrl/src/taskpane/taskpane.html",
+    "brk-multihub://$originHost"
 )
-if ($BaseUrl) {
-    $base = $BaseUrl.TrimEnd("/")
-    $originHost = ([Uri]$base).Host
-    $spaRedirects.Add("$base/src/auth-redirect.html")
-    $spaRedirects.Add("$base/src/taskpane/taskpane.html")
-    $spaRedirects.Add("brk-multihub://$originHost")
-    Write-Host "Including production redirect URIs for $base"
-}
+Write-Host "Including production redirect URIs for $BaseUrl"
 
 $appParams = @{
     DisplayName            = $DisplayName
@@ -113,9 +151,10 @@ Write-Host "Wrote $configPath" -ForegroundColor Green
 
 Write-Host ""
 Write-Host "Next steps:" -ForegroundColor Cyan
-Write-Host "  1. Grant admin consent for GroupMember.Read.All (required for the policy feature):"
+Write-Host "  1. Host the repo files at: $BaseUrl" -ForegroundColor Yellow
+Write-Host "     (e.g. enable GitHub Pages on your fork, or deploy to any HTTPS host)"
+Write-Host "  2. Grant admin consent for GroupMember.Read.All (required for the policy feature):"
 Write-Host "     https://login.microsoftonline.com/$tenantId/adminconsent?client_id=$clientId" -ForegroundColor Yellow
-Write-Host "  2. (Optional) Create an 'ShareLynx_Policy' SharePoint list on your root site"
+Write-Host "  3. Upload manifest.xml in M365 admin center > Integrated Apps (see README.md)"
+Write-Host "  4. (Optional) Create a 'ShareLynx_Policy' SharePoint list on your root site"
 Write-Host "     with text columns Title and SettingValue to configure per-tenant link policies."
-Write-Host "  3. npm install && npm run certs && npm start"
-Write-Host "  4. Sideload manifest.xml (see README.md)."
