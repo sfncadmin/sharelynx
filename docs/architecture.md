@@ -27,7 +27,7 @@ Token caching uses `sessionStorage`. The active account is tracked in the MSAL i
 | Scope | Used for |
 |-|-|
 | `User.Read` | Sign-in identity, account display name |
-| `Files.ReadWrite.All` | Browse, upload, create links, manage permissions |
+| `Files.ReadWrite` | Create sharing links, upload files to the user's own OneDrive. For SharePoint items, the delegated call runs as the signed-in user with their existing site permissions -- no `.All` needed. |
 | `Sites.Read.All` | SharePoint site/library browsing, policy list read |
 | `GroupMember.Read.All` | Admin section (requires admin consent) |
 | `SharePointTenantSettings.Read.All` | Mirror SP admin sharing defaults when no policy list exists (optional, skipped silently if not consented) |

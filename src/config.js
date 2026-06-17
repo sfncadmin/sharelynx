@@ -2,5 +2,5 @@
 window.SHARELYNX_CONFIG = {
   clientId: "58c7a295-2d2d-4173-80bb-ea7143c5055c",
   tenantId: "62aefe8d-5d6e-4588-93a5-ca1827742bf9",
-  scopes: ["User.Read", "Files.ReadWrite.All", "Sites.Read.All"]
+  scopes: ["User.Read", "Files.ReadWrite", "Sites.Read.All"]
 };

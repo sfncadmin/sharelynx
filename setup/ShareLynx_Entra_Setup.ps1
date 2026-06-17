@@ -5,7 +5,7 @@
 
 .DESCRIPTION
     Registers a public client (SPA) app with delegated Graph permissions:
-    User.Read, Files.ReadWrite.All, Sites.Read.All, GroupMember.Read.All.
+    User.Read, Files.ReadWrite, Sites.Read.All, GroupMember.Read.All.
 
     Generates manifest.xml from manifest.template.xml, stamping in the
     hosting URL you provide via -BaseUrl (or interactively when omitted).
@@ -87,7 +87,7 @@ Write-Host "Connected to tenant $tenantId as $($ctx.Account)"
 # Resolve delegated permission scope IDs dynamically from the Graph service principal
 $graphAppId = "00000003-0000-0000-c000-000000000000"
 $graphSp = Get-MgServicePrincipal -Filter "appId eq '$graphAppId'"
-$scopeNames = @("User.Read", "Files.ReadWrite.All", "Sites.Read.All", "GroupMember.Read.All")
+$scopeNames = @("User.Read", "Files.ReadWrite", "Sites.Read.All", "GroupMember.Read.All")
 $resourceAccess = foreach ($name in $scopeNames) {
     $scope = $graphSp.Oauth2PermissionScopes | Where-Object { $_.Value -eq $name }
     if (-not $scope) { throw "Could not resolve Graph delegated permission '$name'." }
@@ -134,7 +134,7 @@ if ($MultiTenant) {
 // Multi-tenant: any Microsoft 365 organization can sign in.
 window.SHARELYNX_CONFIG = {
   clientId: "$clientId",
-  scopes: ["User.Read", "Files.ReadWrite.All", "Sites.Read.All", "GroupMember.Read.All"]
+  scopes: ["User.Read", "Files.ReadWrite", "Sites.Read.All", "GroupMember.Read.All"]
 };
 "@
 } else {
@@ -143,7 +143,7 @@ window.SHARELYNX_CONFIG = {
 window.SHARELYNX_CONFIG = {
   clientId: "$clientId",
   tenantId: "$tenantId",
-  scopes: ["User.Read", "Files.ReadWrite.All", "Sites.Read.All", "GroupMember.Read.All"]
+  scopes: ["User.Read", "Files.ReadWrite", "Sites.Read.All", "GroupMember.Read.All"]
 };
 "@
 }
