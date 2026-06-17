@@ -12,7 +12,7 @@
   <Description DefaultValue="Create OneDrive and SharePoint sharing links with expiration and access management, and convert attachments to links, without leaving Outlook."/>
   <IconUrl DefaultValue="{{BASE_URL}}/src/assets/icon-64.png"/>
   <HighResolutionIconUrl DefaultValue="{{BASE_URL}}/src/assets/icon-128.png"/>
-  <SupportUrl DefaultValue="{{BASE_URL}}/src/taskpane/taskpane.html"/>
+  <SupportUrl DefaultValue="{{BASE_URL}}/docs/support.html"/>
   <AppDomains>
     <AppDomain>https://login.microsoftonline.com</AppDomain>
     <AppDomain>https://graph.microsoft.com</AppDomain>
@@ -22,7 +22,7 @@
   </Hosts>
   <Requirements>
     <Sets>
-      <Set Name="Mailbox" MinVersion="1.8"/>
+      <Set Name="Mailbox" MinVersion="1.12"/>
     </Sets>
   </Requirements>
   <FormSettings>
@@ -47,7 +47,7 @@
   <VersionOverrides xmlns="http://schemas.microsoft.com/office/mailappversionoverrides" xsi:type="VersionOverridesV1_0">
     <VersionOverrides xmlns="http://schemas.microsoft.com/office/mailappversionoverrides/1.1" xsi:type="VersionOverridesV1_1">
       <Requirements>
-        <bt:Sets DefaultMinVersion="1.8">
+        <bt:Sets DefaultMinVersion="1.12">
           <bt:Set Name="Mailbox"/>
         </bt:Sets>
       </Requirements>

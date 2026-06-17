@@ -70,7 +70,7 @@ This creates (or updates) the `ShareLynx_Policy` SharePoint list on the tenant r
 
 ### 5. Users open Outlook
 
-Restart Outlook. The **ShareLynx** button appears on the Message ribbon (compose and read). First use: open a draft > ShareLynx > sign in.
+Restart Outlook. The **ShareLynx** button appears on the Message ribbon (compose and read) for Outlook clients that support the Mailbox 1.12 requirement set. First use: open a draft > ShareLynx > sign in.
 
 Nothing is installed per machine. There is no per-tenant code -- one hosted instance serves every tenant.
 
@@ -115,10 +115,10 @@ This is a local cache issue, not a deploy delay -- seconds, not hours.
 Confirm admin consent was granted in the user's tenant and that the redirect URIs on the app registration include the hosting URL.
 
 **Policy not applying**
-The list must be named `ShareLynx_Policy` on the tenant root site with `Title` and `SettingValue` text columns. Policy loads at sign-in -- changes take effect after the next sign-in.
+The list must be named `ShareLynx_Policy` on the tenant root site with `Title` and `SettingValue` text columns. Policy loads at sign-in -- changes take effect after the next sign-in. If the add-in cannot read the policy list, it limits risky link types for that session and shows a warning.
 
 **Smart Alert not firing**
-Classic Outlook needs an M365 subscription build with event-based activation (Version 2206+). Check that the add-in loaded (button visible on the ribbon) and the on-send threshold isn't set to 0.
+The Outlook client must support the Mailbox 1.12 requirement set and event-based activation. Check that the add-in loaded (button visible on the ribbon) and the on-send threshold isn't set to 0.
 
 **Add-in button missing after deploy**
 Integrated Apps propagation can take hours on first deploy. Confirm the user is in the assigned group, then restart Outlook.
