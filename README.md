@@ -126,7 +126,13 @@ src/assets/                      Icons
 | Your static host | the code (`src/**`) | depends on host (GitHub Pages: ~1--2 min) |
 | M365 Integrated Apps | the manifest (buttons, permissions, URLs) | up to ~24h, only when `manifest.xml` changes |
 
-Code changes are just a push to your host. Manifest changes must be re-uploaded per tenant; rare.
+Code changes are just a push to your host. Manifest changes must be regenerated, version-bumped, and re-uploaded per tenant; rare. The script is `setup\ShareLynx_Entra_Setup.ps1`, for example:
+
+```powershell
+.\setup\ShareLynx_Entra_Setup.ps1 -MultiTenant -BaseUrl https://sfncadmin.github.io/sharelynx
+```
+
+The script does not bump the manifest version automatically; update `<Version>` in `manifest.template.xml` before regenerating `manifest.xml`.
 
 **Stale pane after a push:** Outlook's WebView2 caches old JS. Fix: close/reopen the task pane, restart Outlook, or clear `%LOCALAPPDATA%\Microsoft\Office\16.0\Wef\` while Outlook is closed.
 
