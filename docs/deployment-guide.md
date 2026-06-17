@@ -113,6 +113,21 @@ Commit and push after bumping and regenerating so the hosted copy matches the fi
 
 If you change your hosting URL, re-run the setup script with the new `-BaseUrl` to regenerate `manifest.xml`, then re-upload it.
 
+### Revoking old permission consents
+
+When the setup script narrows permission scopes (e.g. `Files.ReadWrite.All` to `Files.ReadWrite`), updating the app registration only changes what future consent prompts request. Existing `oauth2PermissionGrant` entries for the broader scope persist until explicitly revoked.
+
+For a single-user deployment, revoke the old grant in Entra:
+
+1. Go to **Entra admin center** > **Enterprise applications** > **ShareLynx**
+2. Under **Permissions**, find the old `Files.ReadWrite.All` delegated grant
+3. Click the grant and select **Revoke**
+4. Re-consent with the narrower scopes by signing into the add-in (or re-running admin consent)
+
+For a tenant-wide deployment (M365 Integrated Apps), an admin must revoke the org-wide consent the same way before re-consenting on behalf of the organization.
+
+The runtime scopes in `config.js` take effect immediately on deploy -- MSAL will only request the narrower scope regardless of what Entra has consented. Revoking the old grant is a defense-in-depth step to ensure the broader permission cannot be used if the client is modified.
+
 ### Stale pane after a push
 
 Outlook's embedded browser (WebView2) caches old JS, so the pane can show old code even though Pages updated. Fixes, easiest first:
