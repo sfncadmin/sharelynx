@@ -5,19 +5,40 @@ const BASE = "https://graph.microsoft.com/v1.0";
 const SIMPLE_UPLOAD_LIMIT = 4 * 1024 * 1024; // above this, use an upload session
 const CHUNK_SIZE = 5 * 1024 * 1024; // must be a multiple of 320 KiB
 
+const RETRY_STATUSES = new Set([429, 503, 504]);
+const MAX_RETRIES = 3;
+const BACKOFF_MS = [1000, 2000, 4000];
+
+function retryDelay(res, attempt) {
+  if (res.status === 429) {
+    const after = res.headers.get("Retry-After");
+    if (after) return Number(after) * 1000;
+  }
+  return BACKOFF_MS[attempt] || BACKOFF_MS[BACKOFF_MS.length - 1];
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function call(path, { method = "GET", body, headers = {} } = {}) {
   const token = await getToken();
   const isBinary = body instanceof Uint8Array || body instanceof ArrayBuffer;
-  const res = await fetch(BASE + path, {
-    method,
-    headers: {
-      Authorization: "Bearer " + token,
-      ...(body && !isBinary ? { "Content-Type": "application/json" } : {}),
-      ...(isBinary ? { "Content-Type": "application/octet-stream" } : {}),
-      ...headers
-    },
-    body: isBinary ? body : body ? JSON.stringify(body) : undefined
-  });
+  const reqHeaders = {
+    Authorization: "Bearer " + token,
+    ...(body && !isBinary ? { "Content-Type": "application/json" } : {}),
+    ...(isBinary ? { "Content-Type": "application/octet-stream" } : {}),
+    ...headers
+  };
+  const reqBody = isBinary ? body : body ? JSON.stringify(body) : undefined;
+
+  let res;
+  for (let attempt = 0; ; attempt++) {
+    res = await fetch(BASE + path, { method, headers: reqHeaders, body: reqBody });
+    if (res.ok || !RETRY_STATUSES.has(res.status) || attempt >= MAX_RETRIES) break;
+    await sleep(retryDelay(res, attempt));
+  }
+
   let data = null;
   const text = await res.text();
   if (text) {
@@ -128,11 +149,14 @@ export async function uploadFile(folder, name, bytes, onProgress) {
   let item = null;
   for (let start = 0; start < total; start += CHUNK_SIZE) {
     const end = Math.min(start + CHUNK_SIZE, total);
-    const res = await fetch(session.uploadUrl, {
-      method: "PUT",
-      headers: { "Content-Range": "bytes " + start + "-" + (end - 1) + "/" + total },
-      body: bytes.subarray(start, end)
-    });
+    const chunkHeaders = { "Content-Range": "bytes " + start + "-" + (end - 1) + "/" + total };
+    const chunk = bytes.subarray(start, end);
+    let res;
+    for (let attempt = 0; ; attempt++) {
+      res = await fetch(session.uploadUrl, { method: "PUT", headers: chunkHeaders, body: chunk });
+      if (res.ok || res.status < 500 || attempt >= MAX_RETRIES) break;
+      await sleep(BACKOFF_MS[attempt] || BACKOFF_MS[BACKOFF_MS.length - 1]);
+    }
     if (!res.ok) {
       const text = await res.text();
       throw new Error("Upload failed (" + res.status + "): " + text.slice(0, 200));
