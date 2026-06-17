@@ -3,7 +3,7 @@
 // brokering, falling back to a standard MSAL popup flow otherwise.
 
 const CFG = window.SHARELYNX_CONFIG || {};
-const SCOPES = CFG.scopes || ["User.Read", "Files.ReadWrite.All", "Sites.Read.All"];
+const SCOPES = CFG.scopes || ["User.Read", "Files.ReadWrite", "Sites.Read.All"];
 
 let pca = null;
 
