@@ -169,6 +169,7 @@ These are Microsoft Graph / SharePoint Online constraints, not bugs:
 - Snapshot-style links (frozen copy at send time, so edits to the original don't change what the recipient sees)
 - Inline education (info tooltips explaining each sharing choice in plain language)
 - Protected storage for converted attachments (org-managed library so links survive folder cleanup and user offboarding)
+- Manifest-only deployment tooling (generate `manifest.xml`, bump version safely, and avoid touching Entra app registrations or `src/config.js`)
 - View density toggle (compact vs. comfortable with thumbnails)
 - Block-download links (Graph beta / SharePoint REST)
 - Drag-and-drop upload
