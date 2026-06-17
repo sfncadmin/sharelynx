@@ -26,7 +26,7 @@ export async function initAuth() {
       // resolve against the current page so it works at a domain root or a /repo/ subpath
       redirectUri: new URL("../auth-redirect.html", location.href).href
     },
-    cache: { cacheLocation: "localStorage" }
+    cache: { cacheLocation: "sessionStorage" }
   };
   try {
     pca = await msal.createNestablePublicClientApplication(config);
@@ -76,11 +76,14 @@ export async function trySilentSignIn() {
 }
 
 export async function signOut() {
-  if (!pca) return;
+  if (!pca) return { cleared: true };
+  let cleared = true;
   try {
     if (pca.clearCache) await pca.clearCache();
   } catch (e) {
-    // best effort
+    // Some Outlook brokered auth runtimes don't support explicit cache clearing.
+    cleared = false;
   }
   pca.setActiveAccount(null);
+  return { cleared };
 }

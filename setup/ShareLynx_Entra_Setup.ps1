@@ -125,7 +125,8 @@ if ($existing) {
 $clientId = $app.AppId
 Write-Host "App (client) ID: $clientId" -ForegroundColor Green
 
-# Write src\config.js (gitignored - tenant/machine local)
+# Write src\config.js. The clientId is not a secret for this public-client SPA,
+# so the file can be committed with the hosted static add-in.
 $configPath = Join-Path (Split-Path $PSScriptRoot -Parent) "src\config.js"
 if ($MultiTenant) {
     $configContent = @"

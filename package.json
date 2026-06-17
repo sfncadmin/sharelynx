@@ -1,0 +1,17 @@
+{
+  "name": "sfnc-share-links",
+  "version": "1.0.0",
+  "private": true,
+  "description": "ShareLynx Outlook add-in for creating and managing OneDrive and SharePoint sharing links.",
+  "scripts": {
+    "check:js": "node --check src/taskpane/auth.js && node --check src/taskpane/graph.js && node --check src/taskpane/taskpane.js && node --check src/launchevent/launchevent.js",
+    "validate:manifest": "office-addin-manifest validate manifest.xml"
+  },
+  "dependencies": {
+    "@azure/msal-browser": "^3.26.0"
+  },
+  "devDependencies": {
+    "office-addin-dev-certs": "latest",
+    "office-addin-manifest": "latest"
+  }
+}

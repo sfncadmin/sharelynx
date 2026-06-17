@@ -1,5 +1,4 @@
 node_modules/
-package-lock.json
 
 # manifest.xml is generated from manifest.template.xml by the setup script,
 # stamped with the deployer's hosting URL. Don't commit it -- each fork has

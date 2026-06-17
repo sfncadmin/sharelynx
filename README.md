@@ -4,7 +4,7 @@
 
 ShareLynx is an Outlook add-in that brings file sharing directly into the compose and reading pane -- no more switching to OneDrive, copying a link, and pasting it back. Browse your files, create sharing links with the right audience and expiration, manage existing links, and convert oversized attachments to links, all without leaving the email you're writing.
 
-Works in classic Outlook for Windows, new Outlook, and Outlook on the web. Deploys to any Microsoft 365 tenant with zero per-machine installs.
+Works in classic Outlook for Windows, new Outlook, and Outlook on the web when the client supports the Mailbox 1.12 requirement set used by the on-send Smart Alert. Deploys to any Microsoft 365 tenant with zero per-machine installs.
 
 <p align="center">
   <img src="docs/images/files-tab.png" alt="SharePoint file browser" width="230" />
@@ -43,7 +43,7 @@ Admins can control which link types are available, set organization-wide default
 
 ## How it's built
 
-Pure client-side -- HTML, CSS, and vanilla JavaScript. No backend, no database, no stored data. Host it anywhere that serves HTTPS -- GitHub Pages, Azure Static Web Apps, any static host. Authentication is handled by MSAL.js with Nested App Authentication (NAA) where the host supports it. All data flows directly between the user's browser and Microsoft Graph using delegated permissions.
+Pure client-side -- HTML, CSS, and vanilla JavaScript. No backend and no ShareLynx-hosted database. Host it anywhere that serves HTTPS -- GitHub Pages, Azure Static Web Apps, any static host. Authentication is handled by MSAL.js with Nested App Authentication (NAA) where the host supports it. Tokens are cached in session storage, and all data flows directly between the user's browser and Microsoft Graph using delegated permissions.
 
 The Entra app registration is multi-tenant, so one hosted instance serves every organization. Deploying to a new tenant is just admin consent + manifest upload in the M365 admin center.
 
@@ -112,6 +112,7 @@ src/vendor/msal-browser.min.js   Vendored MSAL (no CDN or npm dependency)
 src/taskpane/                    Taskpane UI (HTML/CSS/JS, auth, Graph calls)
 src/launchevent/launchevent.js   On-send attachment size alert (ES5)
 src/commands/commands.html       Event runtime page for new Outlook / OWA
+docs/support.html                Support URL target for the manifest
 src/assets/                      Icons
 ```
 
@@ -140,6 +141,7 @@ These are Microsoft Graph / SharePoint Online constraints, not bugs:
 - **Expiration** is generally only honored on "Anyone" links (SharePoint Online policy).
 - **Password-protected links** are OneDrive Personal only in Graph v1.0.
 - **Block download** isn't exposed in Graph v1.0 `createLink`.
+- The on-send alert uses the Mailbox 1.12 requirement set. Older Outlook clients can be blocked by the manifest even if the task pane code would otherwise run.
 - The on-send alert threshold is read via roamingSettings; changes apply after Outlook reloads the add-in.
 
 </details>
@@ -149,7 +151,7 @@ These are Microsoft Graph / SharePoint Online constraints, not bugs:
 
 - **Sign-in errors**: confirm admin consent was granted in the user's tenant and the redirect URIs on the app registration include the hosting URL.
 - **Policy not applying**: the list must be named `ShareLynx_Policy` on the tenant root site with `Title`/`SettingValue` text columns; policy loads at sign-in.
-- **Smart Alert not firing**: classic Outlook needs an M365 subscription build with event-based activation (Version 2206+); check that the add-in loaded (button visible) and the threshold isn't 0.
+- **Smart Alert not firing**: confirm the Outlook client supports Mailbox 1.12 / event-based activation, the add-in loaded, and the threshold isn't 0.
 - **Add-in button missing**: Integrated Apps propagation can take hours on first deploy; confirm the user is in the assigned group, then restart Outlook.
 
 </details>

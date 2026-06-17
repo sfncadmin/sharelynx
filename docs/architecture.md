@@ -6,7 +6,7 @@ How ShareLynx is built and why it's built that way.
 
 ## Design principles
 
-- **No backend.** The add-in is a pure static SPA -- HTML, CSS, and vanilla JavaScript. No server-side code, no database, no stored data. Host it on any HTTPS static server.
+- **No backend.** The add-in is a pure static SPA -- HTML, CSS, and vanilla JavaScript. No server-side code and no ShareLynx-hosted database. Host it on any HTTPS static server.
 - **No build step.** No bundler, no transpiler, no framework. Push and your host serves the files as-is. The `.nojekyll` file tells GitHub Pages not to process them (other hosts ignore it).
 - **No runtime dependencies.** MSAL.js is vendored at `src/vendor/msal-browser.min.js` -- no CDN fetch, no `node_modules` at runtime. The only external calls are to Microsoft Graph and the MSAL authority endpoints.
 - **Direct Graph access.** All data flows between the user's browser and Microsoft Graph using delegated permissions. Nothing is proxied, cached, or logged server-side.
@@ -20,7 +20,7 @@ Auth is handled by MSAL.js with two paths:
 1. **Nested App Authentication (NAA)** -- used when the Outlook host supports brokering (new Outlook, OWA). The add-in creates a nestable public client and the host brokers the token silently.
 2. **Popup fallback** -- used in classic Outlook for Windows or when NAA isn't available. Standard MSAL popup flow with `select_account` prompt.
 
-Token caching uses `localStorage`. The active account is tracked in the MSAL instance so silent renewal works across tab/pane reopens.
+Token caching uses `sessionStorage`. The active account is tracked in the MSAL instance so silent renewal works while the pane is open, but cached tokens are not intentionally kept across browser sessions.
 
 ### Scopes
 
@@ -41,8 +41,8 @@ The Entra app registration uses `AzureADMultipleOrgs` sign-in audience -- work/s
 ## Security model
 
 - **No client secret.** This is a public-client SPA. The `clientId` in `config.js` is not a secret -- it identifies the app but cannot authenticate without a user's interactive sign-in.
-- **No stored data.** The add-in stores user preferences (settings, pins, cached delta tokens) in `localStorage` and Outlook roaming settings. No user content, files, or tokens are written to the server or repo.
-- **Policy enforcement at creation time.** Tenant policy (which link types are allowed, expiration requirements) is enforced when the sharing link is created, not just hidden in the UI. If an admin disallows anonymous links, the API call to create one will fail and the error is surfaced.
+- **No server-side storage.** User preferences, pins, and shared-link scan caches are stored in the user's browser storage and Outlook roaming settings. Auth tokens are stored by MSAL in `sessionStorage`. No user content, files, or tokens are written to a ShareLynx server or repo.
+- **Policy enforcement at creation time.** Tenant policy (which link types are allowed, expiration requirements) is applied when the sharing link is created, not just hidden in the UI. If the policy list cannot be read, the add-in fails conservatively by hiding risky link types for that session and warning the user.
 - **Delegated permissions only.** Every Graph call runs as the signed-in user with their permissions. The add-in cannot access anything the user couldn't access themselves.
 
 ---
@@ -81,10 +81,10 @@ src/
 ## Data flow
 
 1. User opens the add-in pane in Outlook
-2. MSAL authenticates (NAA or popup) and caches an access token in `localStorage`
+2. MSAL authenticates (NAA or popup) and caches tokens in `sessionStorage`
 3. User browses files -- `graph.js` calls `/me/drive/...` or `/sites/...` endpoints
 4. User creates a sharing link -- `graph.js` calls `createLink` on the drive item
 5. Link is inserted into the email body via `Office.context.mailbox.item.body.setAsync` or copied to clipboard
 6. On-send handler (`launchevent.js`) reads attachment sizes via `getAttachmentsAsync` and compares against the threshold stored in Outlook roaming settings
 
-All state lives in `localStorage` (preferences, pins, delta cache) and Outlook roaming settings (threshold, pins, shared-item registry). Nothing persists server-side.
+App state lives in browser storage (preferences, pins, delta cache) and Outlook roaming settings (threshold, pins, shared-item registry). Nothing persists server-side.

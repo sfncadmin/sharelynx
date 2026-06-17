@@ -82,6 +82,8 @@ const DEFAULT_POLICY = {
   homeAttribute: 10,
   spHomes: {},
   loaded: false,
+  readFailed: false,
+  readError: null,
   _listUrl: null,
 };
 
@@ -194,11 +196,14 @@ function wireUi() {
   });
 
   $("#btn-signout").addEventListener("click", async () => {
-    await signOut();
+    const result = await signOut();
     resetSharedState();
     $("#app").hidden = true;
     $("#account-chip").hidden = true;
     $("#view-signin").hidden = false;
+    if (result && result.cleared === false) {
+      showSigninError("Signed out of this pane. Outlook may still keep your Microsoft session active until you close the pane or Outlook.");
+    }
   });
 
   document.querySelectorAll(".tab").forEach((btn) => {
@@ -305,10 +310,24 @@ async function loadTenantPolicy() {
 
   applyPolicyToUI();
   renderSettingsForm();
+  if (policy.readFailed) {
+    toast("ShareLynx policy could not be read, so risky link types were limited for this session.", true);
+  }
 }
 
 function parsePolicy(raw) {
-  if (!raw || !raw._raw) return { ...DEFAULT_POLICY };
+  if (!raw || raw._status === "missing") return { ...DEFAULT_POLICY };
+  if (raw._status === "error") {
+    return {
+      ...DEFAULT_POLICY,
+      allowAnonymousLinks: false,
+      defaultScope: "organization",
+      defaultType: "view",
+      readFailed: true,
+      readError: raw._error || "Policy could not be read"
+    };
+  }
+  if (!raw._raw) return { ...DEFAULT_POLICY };
   const p = { ...DEFAULT_POLICY, loaded: true, _listUrl: raw._listUrl };
   const r = raw._raw;
   if ("allowAnonymousLinks" in r) p.allowAnonymousLinks = r.allowAnonymousLinks !== "false";
@@ -332,10 +351,12 @@ function parsePolicy(raw) {
 
 function enforcePolicyScope(scope) {
   const allowAnon = policy.allowAnonymousLinks && (!policy.adminOnlyAnonymousLinks || isAdmin);
-  if (scope === "anonymous" && !allowAnon) scope = "organization";
-  if (scope === "organization" && !policy.allowOrganizationLinks) scope = "users";
-  if (scope === "users" && !policy.allowSpecificPeopleLinks) scope = "organization";
-  return scope;
+  const allowed = [];
+  if (policy.allowOrganizationLinks) allowed.push("organization");
+  if (policy.allowSpecificPeopleLinks) allowed.push("users");
+  if (allowAnon) allowed.push("anonymous");
+  if (allowed.includes(scope)) return scope;
+  return allowed[0] || "organization";
 }
 
 function applyPolicyToUI() {
@@ -827,7 +848,15 @@ async function createLinkFlow(file, opts) {
   }
   if (opts.scope === "users") {
     if (opts.recipients.length === 0) throw new Error("Enter at least one recipient for a specific-people link.");
-    const res = await graph.grantOnLink(url, opts.recipients, opts.type === "edit" ? "write" : "read");
+    let res;
+    try {
+      res = await graph.grantOnLink(url, opts.recipients, opts.type === "edit" ? "write" : "read");
+    } catch (e) {
+      if (status !== 200 && perm.id) {
+        try { await graph.deletePermission(file.driveId, file.itemId, perm.id); } catch (cleanupErr) { /* best effort */ }
+      }
+      throw new Error("The link was created but recipients could not be granted access (" + e.message + ").");
+    }
     const updated = (res.value || []).find((p) => p.link && p.link.webUrl);
     if (updated) url = updated.link.webUrl;
   }
@@ -1401,11 +1430,12 @@ function sharedRow(entry, directOnly = false) {
 
 let attachments = [];
 
-function refreshAttachments() {
+function refreshAttachments(opts = {}) {
   if (!composeMode) return;
+  const clearLog = opts.clearLog !== false;
   const list = $("#attachment-list");
   list.innerHTML = `<div class="loading">Loading&hellip;</div>`;
-  $("#convert-log").textContent = "";
+  if (clearLog) $("#convert-log").textContent = "";
   Office.context.mailbox.item.getAttachmentsAsync((r) => {
     if (r.status !== Office.AsyncResultStatus.Succeeded) {
       list.innerHTML = `<div class="empty">Couldn't read attachments: ${esc(r.error ? r.error.message : "")}</div>`;
@@ -1486,6 +1516,7 @@ async function convertSelectedAttachments() {
   const expiry = settings.expDays > 0 ? datePlusDays(settings.expDays) + "T23:59:59Z" : null;
 
   const done = [];
+  const failed = [];
   try {
     await graph.ensureFolder(settings.folder);
   } catch (e) {
@@ -1507,6 +1538,7 @@ async function convertSelectedAttachments() {
       setSt(a.id, "done", "ok");
     } catch (e) {
       setSt(a.id, e.message, "err");
+      failed.push({ name: a.name, message: e.message });
     }
   }
 
@@ -1514,21 +1546,29 @@ async function convertSelectedAttachments() {
     const items = done
       .map((d) => `<li>${linkHtml(d.name, d.url, expiry)}</li>`)
       .join("");
+    let inserted = false;
     try {
       await insertHtml(`<p>Shared via OneDrive:</p><ul>${items}</ul>`);
+      inserted = true;
     } catch (e) {
-      notes.push("Links could not be inserted into the body (" + e.message + ") — they were left as attachments.");
+      notes.push("Links could not be inserted into the body (" + e.message + "); the original attachments were kept.");
     }
-    for (const d of done) {
-      try {
-        await removeAttachment(d.id);
-      } catch (e) {
-        notes.push(`Couldn't remove attachment "${d.name}": ${e.message}`);
+    if (inserted) {
+      for (const d of done) {
+        try {
+          await removeAttachment(d.id);
+        } catch (e) {
+          notes.push(`Original attachment "${d.name}" is still attached because it could not be removed: ${e.message}`);
+          failed.push({ name: d.name, message: "couldn't remove original attachment" });
+        }
       }
     }
   }
   log.textContent =
-    `${done.length} of ${targets.length} attachment(s) converted.` + (notes.length ? " " + notes.join(" ") : "");
+    `${done.length} of ${targets.length} attachment(s) converted.` +
+    (failed.length ? ` ${failed.length} item(s) need attention.` : "") +
+    (notes.length ? " " + notes.join(" ") : "");
+  if (failed.length) toast("Some attachments still need attention. Check the attachment conversion message.", true);
   btn.disabled = false;
-  refreshAttachments();
+  refreshAttachments({ clearLog: false });
 }

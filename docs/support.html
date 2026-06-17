@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ShareLynx Support</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Arial, sans-serif;
+      line-height: 1.5;
+      color: #1f2937;
+      background: #f8fafc;
+    }
+    main {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 40px 20px;
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 32px;
+      color: #0f172a;
+    }
+    h2 {
+      margin-top: 28px;
+      font-size: 20px;
+      color: #0f172a;
+    }
+    a {
+      color: #0f6cbd;
+    }
+    code {
+      background: #e5e7eb;
+      border-radius: 4px;
+      padding: 1px 5px;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>ShareLynx Support</h1>
+    <p>ShareLynx is an Outlook add-in for creating and managing OneDrive and SharePoint sharing links.</p>
+
+    <h2>Setup Help</h2>
+    <p>Start with the <a href="deployment-guide.md">deployment guide</a>. It covers app registration, admin consent, manifest upload, and common Outlook cache issues.</p>
+
+    <h2>Common Issues</h2>
+    <p>If sign-in fails, confirm that admin consent was granted and that the app registration includes the redirect URL for your hosted copy of ShareLynx.</p>
+    <p>If Smart Alerts do not appear on send, confirm the add-in is deployed to an Outlook client that supports the Mailbox 1.12 requirement set.</p>
+    <p>If tenant policy does not apply, confirm the <code>ShareLynx_Policy</code> list exists on the configured SharePoint site and has <code>Title</code> and <code>SettingValue</code> columns.</p>
+
+    <h2>Security Notes</h2>
+    <p>ShareLynx runs as a static client-side add-in. It does not send files or tokens to a ShareLynx server. Microsoft Graph requests are made directly from Outlook using the signed-in user's delegated permissions.</p>
+  </main>
+</body>
+</html>

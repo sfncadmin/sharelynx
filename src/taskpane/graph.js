@@ -242,7 +242,7 @@ export async function getSharePointPolicy() {
       "/sites/" + siteId + "/lists?$select=id,displayName,webUrl&$top=200"
     );
     const list = (listsData.value || []).find((l) => l.displayName === "ShareLynx_Policy");
-    if (!list) return null;
+    if (!list) return { _status: "missing" };
     const { data: itemsData } = await call(
       "/sites/" + siteId + "/lists/" + list.id +
       "/items?$expand=fields($select=Title,SettingValue)&$select=fields&$top=200"
@@ -254,7 +254,7 @@ export async function getSharePointPolicy() {
     }
     return { _listUrl: list.webUrl, _raw: raw };
   } catch (e) {
-    return null;
+    return { _status: "error", _error: e.message, _code: e.code, _httpStatus: e.status };
   }
 }
 

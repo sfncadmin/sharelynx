@@ -55,7 +55,7 @@ Detailed feature reference for ShareLynx.
 
 - **Link defaults**: audience, permission, expiration days
 - **Attachment conversion**: upload folder name, on-send alert threshold (MB)
-- All settings stored in `localStorage` and synced to Outlook roaming settings where available
+- User settings are stored in browser storage and synced to Outlook roaming settings where available
 - **Admin section** (visible only to members of the configured admin groups): live policy summary, direct link to edit the policy list in SharePoint, and the full supported-key reference
 
 ---
@@ -84,6 +84,8 @@ Admins configure the add-in per tenant through a SharePoint list named `ShareLyn
 Policy is enforced at link creation time, not just in the UI. If an admin disallows anonymous links via policy, the "Anyone" option is removed from the dropdown and the Graph API call would also reject it. If no policy list exists, all audiences are available and built-in defaults apply.
 
 When the tenant has also consented to `SharePointTenantSettings.Read.All`, the add-in mirrors the SharePoint admin center's sharing defaults automatically as a fallback when no policy list exists.
+
+If the policy list cannot be read because of a permissions, network, or Graph error, the add-in limits risky link types for that session and warns the user instead of silently allowing every option.
 
 ### Home directories
 
