@@ -21,7 +21,7 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function call(path, { method = "GET", body, headers = {} } = {}) {
+async function call(path, { method = "GET", body, headers = {}, idempotent } = {}) {
   const token = await getToken();
   const isBinary = body instanceof Uint8Array || body instanceof ArrayBuffer;
   const reqHeaders = {
@@ -32,10 +32,20 @@ async function call(path, { method = "GET", body, headers = {} } = {}) {
   };
   const reqBody = isBinary ? body : body ? JSON.stringify(body) : undefined;
 
+  // 429 is always safe to retry (the request was not processed). 503/504 are
+  // only retried for idempotent methods -- a non-idempotent write (e.g. PUT
+  // with conflictBehavior=rename) may have committed server-side before the
+  // error response, and replaying it would create a duplicate renamed file.
+  const isIdempotent = idempotent !== undefined
+    ? idempotent
+    : (method === "GET" || method === "HEAD" || method === "OPTIONS");
+
   let res;
   for (let attempt = 0; ; attempt++) {
     res = await fetch(BASE + path, { method, headers: reqHeaders, body: reqBody });
-    if (res.ok || !RETRY_STATUSES.has(res.status) || attempt >= MAX_RETRIES) break;
+    const canRetry = res.status === 429
+      || (isIdempotent && (res.status === 503 || res.status === 504));
+    if (res.ok || !canRetry || attempt >= MAX_RETRIES) break;
     await sleep(retryDelay(res, attempt));
   }
 
@@ -154,8 +164,8 @@ export async function uploadFile(folder, name, bytes, onProgress) {
     let res;
     for (let attempt = 0; ; attempt++) {
       res = await fetch(session.uploadUrl, { method: "PUT", headers: chunkHeaders, body: chunk });
-      if (res.ok || res.status < 500 || attempt >= MAX_RETRIES) break;
-      await sleep(BACKOFF_MS[attempt] || BACKOFF_MS[BACKOFF_MS.length - 1]);
+      if (res.ok || (res.status !== 429 && res.status < 500) || attempt >= MAX_RETRIES) break;
+      await sleep(retryDelay(res, attempt));
     }
     if (!res.ok) {
       const text = await res.text();
