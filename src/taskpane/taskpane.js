@@ -1542,6 +1542,7 @@ async function convertSelectedAttachments() {
     }
   }
 
+  const stuckAttachments = [];
   if (done.length) {
     const items = done
       .map((d) => `<li>${linkHtml(d.name, d.url, expiry)}</li>`)
@@ -1558,17 +1559,33 @@ async function convertSelectedAttachments() {
         try {
           await removeAttachment(d.id);
         } catch (e) {
+          stuckAttachments.push(d.name);
+          setSt(d.id, "removal failed", "err");
           notes.push(`Original attachment "${d.name}" is still attached because it could not be removed: ${e.message}`);
           failed.push({ name: d.name, message: "couldn't remove original attachment" });
         }
       }
     }
   }
-  log.textContent =
+
+  let logHtml =
     `${done.length} of ${targets.length} attachment(s) converted.` +
     (failed.length ? ` ${failed.length} item(s) need attention.` : "") +
     (notes.length ? " " + notes.join(" ") : "");
-  if (failed.length) toast("Some attachments still need attention. Check the attachment conversion message.", true);
+  if (stuckAttachments.length) {
+    const names = stuckAttachments.map((n) => `"${esc(n)}"`).join(", ");
+    logHtml += `<br><span class="warn">WARNING: ${names} could not be removed automatically. ` +
+      `The OneDrive link AND the original file are both on this message. ` +
+      `Remove ${stuckAttachments.length === 1 ? "it" : "them"} manually before sending.</span>`;
+  }
+  log.innerHTML = logHtml;
+
+  if (stuckAttachments.length) {
+    const names = stuckAttachments.map((n) => `"${n}"`).join(", ");
+    toast(`Attachment removal failed for ${names}. Remove manually before sending!`, true);
+  } else if (failed.length) {
+    toast("Some attachments still need attention. Check the attachment conversion message.", true);
+  }
   btn.disabled = false;
   refreshAttachments({ clearLog: false });
 }

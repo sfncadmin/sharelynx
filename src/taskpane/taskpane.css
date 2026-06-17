@@ -248,6 +248,7 @@ h3 {
 .att-row .st.ok { color: #107c10; }
 .att-row .st.err { color: var(--danger); }
 .convert-log { color: var(--text-2); font-size: 12px; line-height: 1.5; }
+.convert-log .warn { color: var(--danger); font-weight: 600; }
 
 /* shared-by-me */
 .shared-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
